@@ -12,7 +12,7 @@ from scrapers.common import (
     is_normalized_payload,
     normalize_matches,
 )
-from settings import BETPAWA_FEED_URL
+from settings import BETPAWA_FEED_URL, DEFAULT_BETPAWA_FEED_URL
 
 
 _BETPAWA_HOME_URL = "https://www.betpawa.ng/"
@@ -323,14 +323,19 @@ def fetch_matches(
     native_parser: Callable[[Any], Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Fetch and normalize Betpawa odds, using its configured live query URL."""
-    if BETPAWA_FEED_URL and urlparse(BETPAWA_FEED_URL).scheme in {"http", "https"}:
-        if urlparse(BETPAWA_FEED_URL).path.rstrip("/").endswith(
+    feed_url = (
+        BETPAWA_FEED_URL.strip()
+        if BETPAWA_FEED_URL and BETPAWA_FEED_URL.strip()
+        else DEFAULT_BETPAWA_FEED_URL
+    )
+    if urlparse(feed_url).scheme in {"http", "https"}:
+        if urlparse(feed_url).path.rstrip("/").endswith(
             _BETPAWA_LIVE_QUERY_PATH
         ):
-            return _fetch_live_query(BETPAWA_FEED_URL, native_parser)
+            return _fetch_live_query(feed_url, native_parser)
 
     return fetch_json_feed(
-        BETPAWA_FEED_URL,
+        feed_url,
         "Betpawa",
         lambda payload: parse_payload(payload, native_parser),
     )

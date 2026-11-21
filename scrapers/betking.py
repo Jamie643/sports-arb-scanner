@@ -11,7 +11,7 @@ from scrapers.common import (
     is_normalized_payload,
     normalize_matches,
 )
-from settings import BETKING_FEED_URL
+from settings import BETKING_FEED_URL, DEFAULT_BETKING_FEED_URL
 
 
 _BETKING_HOME_URL = "https://www.betking.com/"
@@ -270,14 +270,16 @@ def parse_payload(payload: Any) -> list[dict[str, Any]]:
 
 def fetch_matches() -> list[dict[str, Any]]:
     """Fetch and normalize the configured BetKing public feed."""
-    if not BETKING_FEED_URL:
-        raise ValueError("BetKing feed URL is not configured")
-
-    parsed_url = urlparse(BETKING_FEED_URL)
+    feed_url = (
+        BETKING_FEED_URL.strip()
+        if BETKING_FEED_URL and BETKING_FEED_URL.strip()
+        else DEFAULT_BETKING_FEED_URL
+    )
+    parsed_url = urlparse(feed_url)
     if parsed_url.scheme == "file":
-        return fetch_json_feed(BETKING_FEED_URL, "BetKing", parse_payload)
+        return fetch_json_feed(feed_url, "BetKing", parse_payload)
 
-    date_urls = _date_wide_urls(BETKING_FEED_URL)
+    date_urls = _date_wide_urls(feed_url)
     if date_urls is not None:
         matches: list[dict[str, Any]] = []
         for date_url in date_urls:
@@ -290,4 +292,4 @@ def fetch_matches() -> list[dict[str, Any]]:
             matches.extend(parse_payload(response.json()))
         return _deduplicate_matches(matches)
 
-    return fetch_json_feed(BETKING_FEED_URL, "BetKing", parse_payload)
+    return fetch_json_feed(feed_url, "BetKing", parse_payload)

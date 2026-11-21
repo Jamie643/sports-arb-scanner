@@ -45,11 +45,14 @@ be alerted again. The long-running FastAPI scanner only deduplicates in memory
 for the lifetime of its process. No cache is needed for the stateless batch
 workflow.
 
-Configure `BET9JA_FEED_URL` and `TELEGRAM_BOT_TOKEN` as repository Actions
-secrets. `BETPAWA_FEED_URL`, `BETKING_FEED_URL`, and `TELEGRAM_CHAT_ID` can be
-repository secrets or variables; a secret takes precedence when both are set.
-`BETKING_FEED_URL` is optional. When `BET9JA_FEED_URL` is unset, the batch scan
-logs a skip and proceeds with an empty Bet9ja feed. Optional secrets
+Betpawa and BetKing use built-in public feed URLs by default, so their URLs do
+not need to be configured in GitHub Actions. To override them locally, set
+`BETPAWA_FEED_URL` or `BETKING_FEED_URL` to a valid HTTP, HTTPS, or local file
+URL. Blank or whitespace-only values use the defaults. Configure
+`BET9JA_FEED_URL`, `TELEGRAM_BOT_TOKEN`, and `TELEGRAM_CHAT_ID` as repository
+Actions secrets (the chat ID can also be a repository variable). When
+`BET9JA_FEED_URL` is unset, the batch scan logs a skip and proceeds with an
+empty Bet9ja feed. Optional secrets
 `DEFAULT_STAKE_NGN`, `MAX_LOOKAHEAD_HOURS`,
 `MAX_ARBITRAGE_PROFIT_PCT`, `MIN_MINUTES_TO_KICKOFF`, and `NOTIFY_EMPTY`
 default to `10000`, `24.0`, `15.0`, `15`, and `false`, respectively.
@@ -80,14 +83,15 @@ providers. Supported markets are Over/Under 2.5 Goals and Both Teams to Score.
 The BetKing adapter maps the public `AreaMatches` / `Items` /
 `OddsCollection` structure, including full-match Total Goals 2.5 and `GG/NG`
 (Both Teams to Score) selections. Date-wide BetKing URLs fetch the current and
-next UTC date. Set `BETKING_FEED_URL` to a prematch feed URL to use it; local
-`file://` feeds and normalized records are supported as well. When configured,
-its matches are compared against Betpawa and Bet9ja by both scanners.
+next UTC date. It defaults to the public date-wide feed; set `BETKING_FEED_URL`
+only to override it. Local `file://` feeds and normalized records are supported
+as well. Its matches are compared against Betpawa and Bet9ja by both scanners.
 
-For Betpawa, set `BETPAWA_FEED_URL` to its `/api/sportsbook/v4/events/lists/by-queries`
-endpoint to use the built-in upcoming-football query for Over/Under 2.5 and
-Both Teams to Score. The adapter sends the `X-Pawa-Brand` header and maps the
-native event response. Normalized and `file://` inputs remain supported.
+Betpawa defaults to `/api/sportsbook/v4/events/lists/by-queries` and uses the
+built-in upcoming-football query for Over/Under 2.5 and Both Teams to Score.
+Set `BETPAWA_FEED_URL` only to override the endpoint. The adapter sends the
+`X-Pawa-Brand` header and maps the native event response. Normalized and
+`file://` inputs remain supported.
 Bet9ja retains normalized-list support and accepts an optional provider parser
 through `parse_payload(payload, native_parser=...)`; unknown native payloads
 fail explicitly instead of being guessed.

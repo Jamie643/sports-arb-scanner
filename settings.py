@@ -1,9 +1,58 @@
 import math
 import os
+from pathlib import Path
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 
 load_dotenv()
+
+DEFAULT_BETKING_FEED_URL = (
+    "https://sportsapicdn-desktop.betking.com/api/feeds/prematch/"
+    "GetEvents/en/{date}/0/0/1"
+)
+DEFAULT_BETPAWA_FEED_URL = (
+    "https://www.betpawa.ng/api/sportsbook/v4/events/lists/by-queries"
+)
+
+
+def _read_feed_url(name: str, default: str) -> str:
+    value = os.getenv(name)
+    if value is None or not value.strip():
+        return default
+
+    feed_url = value.strip()
+    if any(character.isspace() for character in feed_url):
+        raise ValueError(f"{name} must be a valid HTTP, HTTPS, or file URL")
+    try:
+        parsed_url = urlparse(feed_url)
+    except ValueError as exc:
+        raise ValueError(
+            f"{name} must be a valid HTTP, HTTPS, or file URL"
+        ) from exc
+    if parsed_url.scheme in {"http", "https"}:
+        try:
+            valid_http_url = bool(
+                parsed_url.hostname
+                and parsed_url.port != 0
+                and not parsed_url.netloc.endswith(":")
+                and parsed_url.username is None
+                and parsed_url.password is None
+            )
+        except ValueError:
+            valid_http_url = False
+        if valid_http_url:
+            return feed_url
+    elif (
+        parsed_url.scheme == "file"
+        and parsed_url.netloc in {"", "localhost"}
+        and Path(parsed_url.path).is_absolute()
+        and not parsed_url.query
+        and not parsed_url.fragment
+    ):
+        return feed_url
+
+    raise ValueError(f"{name} must be a valid HTTP, HTTPS, or file URL")
 
 
 def _read_default_stake() -> int:
@@ -61,6 +110,12 @@ MIN_MINUTES_TO_KICKOFF = _read_min_minutes_to_kickoff()
 MAX_KICKOFF_DIFF_MINUTES = 30
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-BETPAWA_FEED_URL = os.getenv("BETPAWA_FEED_URL")
+BETPAWA_FEED_URL = _read_feed_url(
+    "BETPAWA_FEED_URL",
+    DEFAULT_BETPAWA_FEED_URL,
+)
 BET9JA_FEED_URL = os.getenv("BET9JA_FEED_URL")
-BETKING_FEED_URL = os.getenv("BETKING_FEED_URL")
+BETKING_FEED_URL = _read_feed_url(
+    "BETKING_FEED_URL",
+    DEFAULT_BETKING_FEED_URL,
+)

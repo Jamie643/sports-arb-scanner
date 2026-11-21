@@ -247,6 +247,19 @@ class ScraperAdapterTests(unittest.TestCase):
         self.assertEqual(request["view"]["marketTypes"], ["5000", "3795"])
         self.assertEqual(request["take"], 40)
 
+    def test_betpawa_blank_feed_url_uses_default_endpoint(self) -> None:
+        with (
+            patch("scrapers.betpawa.BETPAWA_FEED_URL", "  "),
+            patch("scrapers.betpawa._fetch_live_query", return_value=[]) as fetch,
+        ):
+            matches = fetch_betpawa_matches()
+
+        self.assertEqual(matches, [])
+        self.assertEqual(
+            fetch.call_args.args[0],
+            "https://www.betpawa.ng/api/sportsbook/v4/events/lists/by-queries",
+        )
+
     def test_betpawa_live_fetch_paginates_and_deduplicates_by_event_id(self) -> None:
         def event(event_id: str | None, home: str) -> dict[str, Any]:
             return {
@@ -616,6 +629,21 @@ class ScraperAdapterTests(unittest.TestCase):
 
         self.assertEqual(matches, [])
         self.assertEqual(mocked_get.call_count, 2)
+
+    def test_betking_blank_feed_url_uses_default_endpoint(self) -> None:
+        with (
+            patch("scrapers.betking.BETKING_FEED_URL", " \t"),
+            patch("scrapers.betking._date_wide_urls", return_value=None),
+            patch("scrapers.betking.fetch_json_feed", return_value=[]) as fetch,
+        ):
+            matches = fetch_betking_matches()
+
+        self.assertEqual(matches, [])
+        self.assertEqual(
+            fetch.call_args.args[0],
+            "https://sportsapicdn-desktop.betking.com/api/feeds/prematch/"
+            "GetEvents/en/{date}/0/0/1",
+        )
 
 
 if __name__ == "__main__":
