@@ -1,0 +1,1 @@
+"""Provider feed adapters."""

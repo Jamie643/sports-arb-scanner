@@ -1,0 +1,38 @@
+name: Daily arbitrage scan
+
+on:
+  schedule:
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Run daily scan
+        run: python run_once.py
+        env:
+          BETPAWA_FEED_URL: ${{ secrets.BETPAWA_FEED_URL }}
+          BET9JA_FEED_URL: ${{ secrets.BET9JA_FEED_URL }}
+          BETKING_FEED_URL: ${{ secrets.BETKING_FEED_URL }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          DEFAULT_STAKE_NGN: ${{ secrets.DEFAULT_STAKE_NGN || '10000' }}
+          MAX_LOOKAHEAD_HOURS: ${{ secrets.MAX_LOOKAHEAD_HOURS || '24.0' }}
+          MAX_ARBITRAGE_PROFIT_PCT: ${{ secrets.MAX_ARBITRAGE_PROFIT_PCT || '15.0' }}
+          MIN_MINUTES_TO_KICKOFF: ${{ secrets.MIN_MINUTES_TO_KICKOFF || '15' }}
+          NOTIFY_EMPTY: ${{ secrets.NOTIFY_EMPTY || 'false' }}
