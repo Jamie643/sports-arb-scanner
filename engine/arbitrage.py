@@ -96,12 +96,13 @@ def _event_match_score(first: dict[str, Any], second: dict[str, Any]) -> int | N
 
 
 def _market_outcomes(market: str) -> tuple[str, str] | None:
-    normalized = market.casefold()
-    if "2.5" in normalized and ("over" in normalized or "under" in normalized):
-        return "Over 2.5", "Under 2.5"
-    if "both teams" in normalized or "btts" in normalized:
-        return "Yes", "No"
-    return None
+    return {
+        "Over/Under 1.5 Goals": ("Over 1.5", "Under 1.5"),
+        "Over/Under 2.5 Goals": ("Over 2.5", "Under 2.5"),
+        "Over/Under 3.5 Goals": ("Over 3.5", "Under 3.5"),
+        "Both Teams to Score": ("Yes", "No"),
+        "Draw No Bet": ("Home", "Away"),
+    }.get(market)
 
 
 def _rounded_stakes(
@@ -155,12 +156,13 @@ def _build_opportunity(
     if implied_probability >= MAX_IMPLIED_PROBABILITY:
         return None
 
-    stake_a, stake_b, profit = _rounded_stakes(odds_a, odds_b, bankroll)
-    if profit <= 0:
-        return None
-
+    stake_a, stake_b, decisive_profit = _rounded_stakes(odds_a, odds_b, bankroll)
     market = str(first["market"])
-    return {
+    is_draw_no_bet = market == "Draw No Bet"
+    if decisive_profit <= 0:
+        return None
+    guaranteed_profit = 0.0 if is_draw_no_bet else decisive_profit
+    opportunity = {
         "home": first["home"],
         "away": first["away"],
         "kickoff": first["kickoff"],
@@ -181,9 +183,14 @@ def _build_opportunity(
             "url": second["url"],
         },
         "total_stake_ngn": stake_a + stake_b,
-        "guaranteed_profit_ngn": profit,
-        "roi_pct": profit / (stake_a + stake_b) * 100,
+        "guaranteed_profit_ngn": guaranteed_profit,
+        "roi_pct": decisive_profit / (stake_a + stake_b) * 100,
     }
+    if is_draw_no_bet:
+        opportunity["profit_on_decisive_result_ngn"] = decisive_profit
+        opportunity["draw_refund_ngn"] = stake_a + stake_b
+        opportunity["draw_voids_both"] = True
+    return opportunity
 
 
 def _matching_pairs(
@@ -214,9 +221,7 @@ def _matching_pairs(
                         second.get("kickoff"), scan_time, earliest_utc, cutoff_utc
                     ):
                         continue
-                    if first_market.strip().casefold() != str(
-                        second.get("market", "")
-                    ).strip().casefold():
+                    if first_market != second.get("market"):
                         continue
 
                     score = _event_match_score(first, second)
@@ -285,13 +290,15 @@ def find_arbitrage(
 ) -> list[dict[str, Any]]:
     """Find cross-bookmaker two-way arbitrage with rounded Naira stakes.
 
-    Each feed must put Over/Yes in outcome_a and Under/No in outcome_b.
+    Each feed must use canonical market names and put Over/Home/Yes in
+    outcome_a and Under/Away/No in outcome_b.
     Odds must remain available at placement time; the probability threshold
     provides an edge buffer but cannot protect against a changed price. Events
     must start at least the configured minimum minutes from now and no later
     than the UTC lookahead cutoff. Opportunities above the configured ROI cap
-    are discarded. When provided, BetKing matches are compared against both
-    existing feeds.
+    are discarded. Draw No Bet opportunities break even if drawn because both
+    stakes are refunded; their reported profit applies to decisive results.
+    When provided, BetKing matches are compared against both existing feeds.
     """
     if bankroll <= 0:
         raise ValueError("bankroll must be greater than zero")

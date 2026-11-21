@@ -133,6 +133,10 @@ def _market_kind(collection: dict[str, Any]) -> str | None:
     name = odds_type.get("OddsTypeName", "") if isinstance(odds_type, dict) else ""
     normalized_name = " ".join(str(name).casefold().split())
 
+    if "draw no bet" in normalized_name or re.search(r"\bdnb\b", normalized_name):
+        if not any(period in normalized_name for period in ("half", "early")):
+            return "Draw No Bet"
+
     is_btts = (
         "both teams to score" in normalized_name
         or re.search(r"\bbtts\b", normalized_name)
@@ -141,10 +145,13 @@ def _market_kind(collection: dict[str, Any]) -> str | None:
     if is_btts and not any(
         period in normalized_name for period in ("half", "1st half", "2nd half")
     ):
-        return "btts"
-    if "total goals" not in normalized_name:
+        return "Both Teams to Score"
+    if not any(term in normalized_name for term in ("total goals", "over/under")):
         return None
-    if "early" in normalized_name or "half" in normalized_name:
+    if any(
+        term in normalized_name
+        for term in ("early", "half", "home team", "away team", "team total")
+    ):
         return None
 
     line_values: list[Any] = [
@@ -164,15 +171,17 @@ def _market_kind(collection: dict[str, Any]) -> str | None:
                         attribute.get("SpecialValueString"),
                     )
                 )
-    line_is_25 = "2.5" in normalized_name
-    for value in line_values:
-        try:
-            if math.isclose(float(value), 2.5):
-                line_is_25 = True
-                break
-        except (TypeError, ValueError):
-            continue
-    return "over_under_25" if line_is_25 else None
+    for line in (1.5, 2.5, 3.5):
+        line_pattern = rf"(?<!\d){line:.1f}(?!\d)"
+        if re.search(line_pattern, normalized_name):
+            return f"Over/Under {line:.1f} Goals"
+        for value in line_values:
+            try:
+                if math.isclose(float(str(value).replace(",", ".")), line):
+                    return f"Over/Under {line:.1f} Goals"
+            except (TypeError, ValueError):
+                continue
+    return None
 
 
 def _selections(collection: dict[str, Any]) -> dict[str, float]:
@@ -227,15 +236,29 @@ def _parse_betking_payload(payload: Any) -> list[dict[str, Any]]:
                     continue
                 kind = _market_kind(collection)
                 selections = _selections(collection)
-                if kind == "over_under_25":
+                if kind in {
+                    "Over/Under 1.5 Goals",
+                    "Over/Under 2.5 Goals",
+                    "Over/Under 3.5 Goals",
+                }:
                     outcome_a, outcome_b = selections.get("over"), selections.get(
                         "under"
                     )
-                    market = "Over/Under 2.5 Goals"
-                elif kind == "btts":
+                    market = kind
+                elif kind == "Both Teams to Score":
                     outcome_a = selections.get("yes", selections.get("gg"))
                     outcome_b = selections.get("no", selections.get("ng"))
-                    market = "Both Teams to Score"
+                    market = kind
+                elif kind == "Draw No Bet":
+                    outcome_a = selections.get(
+                        "home",
+                        selections.get("1 dnb", selections.get("1")),
+                    )
+                    outcome_b = selections.get(
+                        "away",
+                        selections.get("2 dnb", selections.get("2")),
+                    )
+                    market = kind
                 else:
                     continue
                 if outcome_a is None or outcome_b is None:

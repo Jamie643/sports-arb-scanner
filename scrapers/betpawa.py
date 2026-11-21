@@ -18,7 +18,7 @@ from settings import BETPAWA_FEED_URL, DEFAULT_BETPAWA_FEED_URL
 _BETPAWA_HOME_URL = "https://www.betpawa.ng/"
 _BETPAWA_LIVE_QUERY_PATH = "/api/sportsbook/v4/events/lists/by-queries"
 _BETPAWA_CATEGORY_ID = "2"
-_BETPAWA_MARKET_TYPES = ("5000", "3795")
+_BETPAWA_MARKET_TYPES = ("5000", "3795", "4703")
 _BETPAWA_QUERY_TAKE = 40
 _BETPAWA_MAX_QUERY_PAGES = 5
 
@@ -135,17 +135,32 @@ def _market_kind(market: dict[str, Any], row: dict[str, Any]) -> str | None:
     ).casefold()
 
     if (
+        market_type_id == "4703"
+        or "draw no bet" in descriptors
+        or re.search(r"\bdnb\b", descriptors)
+    ) and not any(term in descriptors for term in ("half", "1st half", "2nd half")):
+        return "Draw No Bet"
+    if (
         market_type_id == "3795"
         or "both teams to score" in descriptors
         or re.search(r"\bbtts\b", descriptors)
     ):
-        return "btts"
-    has_25_line = bool(
-        re.search(r"(?<!\d)2[.,]5(?!\d)", descriptors + " " + line_details)
+        return "Both Teams to Score"
+    if any(
+        term in descriptors
+        for term in ("half", "home team", "away team", "team total")
+    ):
+        return None
+    is_goal_total = any(
+        term in descriptors for term in ("goal", "over/under", "total")
     )
-    is_goal_total = any(term in descriptors for term in ("goal", "over/under", "total"))
-    if has_25_line and (market_type_id == "5000" or is_goal_total):
-        return "over_under_25"
+    if market_type_id == "5000" or is_goal_total:
+        for line in ("1.5", "2.5", "3.5"):
+            if re.search(
+                rf"(?<!\d){line[0]}[.,]5(?!\d)",
+                descriptors + " " + line_details,
+            ):
+                return f"Over/Under {line} Goals"
     return None
 
 
@@ -193,15 +208,23 @@ def _parse_native_payload(payload: Any) -> list[dict[str, Any]] | None:
                     continue
                 kind = _market_kind(market, row)
                 selections = _row_prices(row)
-                if kind == "over_under_25":
+                if kind in {
+                    "Over/Under 1.5 Goals",
+                    "Over/Under 2.5 Goals",
+                    "Over/Under 3.5 Goals",
+                }:
                     outcome_a, outcome_b = selections.get("over"), selections.get(
                         "under"
                     )
-                    market_name = "Over/Under 2.5 Goals"
-                elif kind == "btts":
+                    market_name = kind
+                elif kind == "Both Teams to Score":
                     outcome_a = selections.get("yes", selections.get("gg"))
                     outcome_b = selections.get("no", selections.get("ng"))
-                    market_name = "Both Teams to Score"
+                    market_name = kind
+                elif kind == "Draw No Bet":
+                    outcome_a = selections.get("home", selections.get("1"))
+                    outcome_b = selections.get("away", selections.get("2"))
+                    market_name = kind
                 else:
                     continue
                 if outcome_a is None or outcome_b is None:
@@ -303,9 +326,9 @@ def parse_payload(
 ) -> list[dict[str, Any]]:
     """Adapt Betpawa JSON to the scanner schema.
 
-    Native event responses are mapped for full-time Over/Under 2.5 and BTTS.
-    The normalized-list format remains supported. ``native_parser`` can still
-    be supplied for other Betpawa payload variants.
+    Native event responses are mapped for full-time Over/Under 1.5, 2.5, and
+    3.5, BTTS, and Draw No Bet. The normalized-list format remains supported.
+    ``native_parser`` can still be supplied for other Betpawa payload variants.
     """
     if is_normalized_payload(payload):
         return normalize_matches(payload, "Betpawa")

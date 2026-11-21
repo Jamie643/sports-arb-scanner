@@ -8,6 +8,18 @@ from settings import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 def format_alert(opportunity: dict[str, Any]) -> str:
     leg_a = opportunity["leg_a"]
     leg_b = opportunity["leg_b"]
+    if opportunity.get("draw_voids_both"):
+        profit_text = (
+            "Profit on decisive result*: "
+            f"₦{opportunity['profit_on_decisive_result_ngn']:,.2f}\n"
+            f"Draw: both stakes refunded (₦{opportunity['draw_refund_ngn']:,.0f})\n"
+            f"ROI on decisive result: {opportunity['roi_pct']:.2f}%"
+        )
+    else:
+        profit_text = (
+            f"Guaranteed profit*: ₦{opportunity['guaranteed_profit_ngn']:,.2f}\n"
+            f"ROI: {opportunity['roi_pct']:.2f}%"
+        )
     return (
         "⚽ ARBITRAGE OPPORTUNITY\n\n"
         f"Match: {opportunity['home']} vs {opportunity['away']}\n"
@@ -18,8 +30,7 @@ def format_alert(opportunity: dict[str, Any]) -> str:
         f"{leg_b['bookie']} — {leg_b['outcome']} @ {leg_b['odds']:.2f}\n"
         f"Stake: ₦{leg_b['stake_ngn']:,.0f}\n\n"
         f"Total stake: ₦{opportunity['total_stake_ngn']:,.0f}\n"
-        f"Guaranteed profit*: ₦{opportunity['guaranteed_profit_ngn']:,.2f}\n"
-        f"ROI: {opportunity['roi_pct']:.2f}%\n\n"
+        f"{profit_text}\n\n"
         f"Kickoff: {opportunity['kickoff']}\n"
         "*Only if both quoted odds remain available at placement."
     )

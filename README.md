@@ -75,20 +75,23 @@ Each URL should return either a list of records or an object containing a
 }
 ```
 
-`outcome_a` must consistently mean Over/Yes and `outcome_b` Under/No on both
-providers. Supported markets are Over/Under 2.5 Goals and Both Teams to Score.
-`league` is optional and defaults to an empty string. The adapter overwrites
-`bookie` with the configured provider name.
+`outcome_a` must consistently mean Over/Home/Yes and `outcome_b`
+Under/Away/No on both providers. Supported markets include Over/Under 1.5,
+2.5, and 3.5 Goals, Both Teams to Score, and Draw No Bet. `league` is optional
+and defaults to an empty string. The adapter overwrites `bookie` with the
+configured provider name.
 
 The BetKing adapter maps the public `AreaMatches` / `Items` /
 `OddsCollection` structure, including full-match Total Goals 2.5 and `GG/NG`
-(Both Teams to Score) selections. Date-wide BetKing URLs fetch the current and
+(Both Teams to Score), Total Goals 1.5/3.5, and Draw No Bet selections.
+Date-wide BetKing URLs fetch the current and
 next UTC date. It defaults to the public date-wide feed; set `BETKING_FEED_URL`
 only to override it. Local `file://` feeds and normalized records are supported
 as well. Its matches are compared against Betpawa and Bet9ja by both scanners.
 
 Betpawa defaults to `/api/sportsbook/v4/events/lists/by-queries` and uses the
-built-in upcoming-football query for Over/Under 2.5 and Both Teams to Score.
+built-in upcoming-football query for Over/Under 1.5/2.5/3.5, Both Teams to
+Score, and Draw No Bet.
 Set `BETPAWA_FEED_URL` only to override the endpoint. The adapter sends the
 `X-Pawa-Brand` header and maps the native event response. Normalized and
 `file://` inputs remain supported.
@@ -100,7 +103,9 @@ Arbitrage is emitted only when the two-way implied probability is below 0.99
 and the rounded stakes still leave positive profit. Stakes use ₦100 increments
 and the total cannot exceed the configured bankroll. Prices can change before
 placement, so calculated profit is only guaranteed if both displayed odds are
-still available; fees, limits, and settlement rules are not modeled.
+still available. For Draw No Bet, profit is positive when the match has a
+decisive result; if it is drawn, both stakes are refunded. Fees and limits are
+not modeled.
 
 ## Validation
 

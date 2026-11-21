@@ -107,6 +107,59 @@ class ArbitrageTests(unittest.TestCase):
         self.assertEqual(opportunities[0]["leg_a"]["outcome"], "Yes")
         self.assertEqual(opportunities[0]["leg_b"]["outcome"], "No")
 
+    def test_arbitrages_new_goal_lines_and_draw_no_bet(self) -> None:
+        cases = (
+            ("Over/Under 1.5 Goals", 2.10, 1.80, 1.90, 2.10, "Over 1.5", "Under 1.5"),
+            ("Over/Under 3.5 Goals", 2.10, 1.80, 1.90, 2.10, "Over 3.5", "Under 3.5"),
+            ("Draw No Bet", 2.20, 1.60, 1.70, 2.20, "Home", "Away"),
+        )
+        for market, a_home, a_away, b_home, b_away, outcome_a, outcome_b in cases:
+            with self.subTest(market=market):
+                betpawa = [{
+                    **self.betpawa[0],
+                    "market": market,
+                    "outcome_a": a_home,
+                    "outcome_b": a_away,
+                }]
+                bet9ja = [{
+                    **self.bet9ja[0],
+                    "market": market,
+                    "outcome_a": b_home,
+                    "outcome_b": b_away,
+                }]
+
+                opportunities = find_arbitrage(betpawa, bet9ja)
+
+                self.assertEqual(len(opportunities), 1)
+                opportunity = opportunities[0]
+                self.assertEqual(opportunity["market"], market)
+                self.assertEqual(opportunity["leg_a"]["outcome"], outcome_a)
+                self.assertEqual(opportunity["leg_b"]["outcome"], outcome_b)
+                self.assertEqual(opportunity["total_stake_ngn"], 10_000)
+                self.assertGreater(opportunity["roi_pct"], 0)
+                if market == "Draw No Bet":
+                    self.assertEqual(opportunity["guaranteed_profit_ngn"], 0)
+                    self.assertEqual(
+                        opportunity["profit_on_decisive_result_ngn"],
+                        1_000,
+                    )
+                    self.assertEqual(opportunity["draw_refund_ngn"], 10_000)
+                    self.assertTrue(opportunity["draw_voids_both"])
+
+    def test_different_canonical_markets_never_cross_match(self) -> None:
+        for first_market, second_market in (
+            ("Over/Under 1.5 Goals", "Over/Under 2.5 Goals"),
+            ("Over/Under 2.5 Goals", "Over/Under 3.5 Goals"),
+            ("Over/Under 1.5 Goals", "Over/Under 3.5 Goals"),
+            ("Over/Under 1.5 Goals", "over/under 1.5 Goals"),
+            ("Draw No Bet", "Over/Under 3.5 Goals"),
+        ):
+            with self.subTest(markets=(first_market, second_market)):
+                betpawa = [{**self.betpawa[0], "market": first_market}]
+                bet9ja = [{**self.bet9ja[0], "market": second_market}]
+
+                self.assertEqual(find_arbitrage(betpawa, bet9ja), [])
+
     def test_compares_betking_matches_when_provided(self) -> None:
         betking = [
             {
@@ -340,6 +393,39 @@ class ArbitrageTests(unittest.TestCase):
         self.assertIn("Stake: ₦5,300", message)
         self.assertIn("Guaranteed profit*: ₦125.00", message)
         self.assertIn("ROI: 1.25%", message)
+
+    def test_draw_no_bet_alert_explains_draw_refund(self) -> None:
+        opportunity = {
+            "home": "Home FC",
+            "away": "Away FC",
+            "kickoff": "2026-12-01T16:00:00Z",
+            "market": "Draw No Bet",
+            "match_score": 99,
+            "leg_a": {
+                "bookie": "BetKing",
+                "outcome": "Home",
+                "odds": 2.2,
+                "stake_ngn": 5000,
+            },
+            "leg_b": {
+                "bookie": "Betpawa",
+                "outcome": "Away",
+                "odds": 2.2,
+                "stake_ngn": 5000,
+            },
+            "total_stake_ngn": 10_000,
+            "guaranteed_profit_ngn": 0,
+            "profit_on_decisive_result_ngn": 1_000,
+            "draw_refund_ngn": 10_000,
+            "draw_voids_both": True,
+            "roi_pct": 10,
+        }
+
+        message = format_alert(opportunity)
+
+        self.assertIn("Profit on decisive result*: ₦1,000.00", message)
+        self.assertIn("Draw: both stakes refunded (₦10,000)", message)
+        self.assertNotIn("Guaranteed profit", message)
 
     def test_scanner_fetches_betking_when_feed_is_configured(self) -> None:
         betking_matches = [

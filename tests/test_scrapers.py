@@ -130,6 +130,21 @@ class ScraperAdapterTests(unittest.TestCase):
                                 },
                                 {
                                     "marketType": {
+                                        "id": "5000",
+                                        "name": "Total Score Over/Under - FT",
+                                    },
+                                    "row": [
+                                        {
+                                            "specifier": {"total": "3.5"},
+                                            "prices": [
+                                                {"name": "Over", "odds": 2.5},
+                                                {"name": "Under", "odds": 1.5},
+                                            ],
+                                        }
+                                    ],
+                                },
+                                {
+                                    "marketType": {
                                         "id": "3795",
                                         "name": "Both Teams To Score - FT",
                                     },
@@ -138,6 +153,20 @@ class ScraperAdapterTests(unittest.TestCase):
                                             "prices": [
                                                 {"name": "Yes", "odds": 1.8},
                                                 {"name": "No", "odds": 2.1},
+                                            ]
+                                        }
+                                    ],
+                                },
+                                {
+                                    "marketType": {
+                                        "id": "4703",
+                                        "name": "Draw No Bet - FT",
+                                    },
+                                    "row": [
+                                        {
+                                            "prices": [
+                                                {"name": "1", "odds": 1.7},
+                                                {"name": "2", "odds": 2.2},
                                             ]
                                         }
                                     ],
@@ -164,17 +193,23 @@ class ScraperAdapterTests(unittest.TestCase):
 
         parsed = parse_betpawa_payload(payload)
 
-        self.assertEqual(len(parsed), 2)
+        self.assertEqual(len(parsed), 5)
         self.assertEqual(parsed[0]["bookie"], "Betpawa")
         self.assertEqual(parsed[0]["home"], "Lagos United")
         self.assertEqual(parsed[0]["away"], "Abuja FC")
         self.assertEqual(parsed[0]["kickoff"], "2026-12-01T16:00:00Z")
-        self.assertEqual(parsed[0]["market"], "Over/Under 2.5 Goals")
+        self.assertEqual(parsed[0]["market"], "Over/Under 1.5 Goals")
         self.assertEqual(parsed[0]["league"], "Nigeria - Premier League")
-        self.assertEqual((parsed[0]["outcome_a"], parsed[0]["outcome_b"]), (2.0, 1.9))
+        self.assertEqual((parsed[0]["outcome_a"], parsed[0]["outcome_b"]), (1.3, 3.1))
         self.assertEqual(parsed[0]["url"], "https://www.betpawa.ng/")
-        self.assertEqual(parsed[1]["market"], "Both Teams to Score")
-        self.assertEqual((parsed[1]["outcome_a"], parsed[1]["outcome_b"]), (1.8, 2.1))
+        self.assertEqual(parsed[1]["market"], "Over/Under 2.5 Goals")
+        self.assertEqual((parsed[1]["outcome_a"], parsed[1]["outcome_b"]), (2.0, 1.9))
+        self.assertEqual(parsed[2]["market"], "Over/Under 3.5 Goals")
+        self.assertEqual((parsed[2]["outcome_a"], parsed[2]["outcome_b"]), (2.5, 1.5))
+        self.assertEqual(parsed[3]["market"], "Both Teams to Score")
+        self.assertEqual((parsed[3]["outcome_a"], parsed[3]["outcome_b"]), (1.8, 2.1))
+        self.assertEqual(parsed[4]["market"], "Draw No Bet")
+        self.assertEqual((parsed[4]["outcome_a"], parsed[4]["outcome_b"]), (1.7, 2.2))
 
     def test_betpawa_maps_native_json_loaded_from_file_url(self) -> None:
         payload = {
@@ -243,8 +278,8 @@ class ScraperAdapterTests(unittest.TestCase):
         query = json.loads(kwargs["params"]["q"])
         request = query["queries"][0]
         self.assertEqual(request["query"]["categories"], ["2"])
-        self.assertEqual(request["query"]["marketTypes"], ["5000", "3795"])
-        self.assertEqual(request["view"]["marketTypes"], ["5000", "3795"])
+        self.assertEqual(request["query"]["marketTypes"], ["5000", "3795", "4703"])
+        self.assertEqual(request["view"]["marketTypes"], ["5000", "3795", "4703"])
         self.assertEqual(request["take"], 40)
 
     def test_betpawa_blank_feed_url_uses_default_endpoint(self) -> None:
@@ -375,6 +410,20 @@ class ScraperAdapterTests(unittest.TestCase):
                             ],
                             "OddsCollection": [
                                 {
+                                    "OddsType": {"OddsTypeName": "Total Goals 1.5"},
+                                    "SpecialBetValue": 1.5,
+                                    "MatchOdds": [
+                                        {
+                                            "OddAttribute": {"OddName": "Over"},
+                                            "Outcome": {"OddOutcome": 1.4},
+                                        },
+                                        {
+                                            "OddAttribute": {"OddName": "Under"},
+                                            "Outcome": {"OddOutcome": 2.8},
+                                        },
+                                    ],
+                                },
+                                {
                                     "OddsType": {"OddsTypeName": "Total Goals 3.5"},
                                     "SpecialBetValue": 3.5,
                                     "MatchOdds": [
@@ -423,6 +472,19 @@ class ScraperAdapterTests(unittest.TestCase):
                                         },
                                     ],
                                 },
+                                {
+                                    "OddsType": {"OddsTypeName": "Draw No Bet"},
+                                    "MatchOdds": [
+                                        {
+                                            "OddAttribute": {"OddName": "1 DNB"},
+                                            "Outcome": {"OddOutcome": 1.7},
+                                        },
+                                        {
+                                            "OddAttribute": {"OddName": "2 DNB"},
+                                            "Outcome": {"OddOutcome": 2.2},
+                                        },
+                                    ],
+                                },
                             ],
                         }
                     ]
@@ -432,16 +494,25 @@ class ScraperAdapterTests(unittest.TestCase):
 
         parsed = parse_betking_payload(payload)
 
-        self.assertEqual(len(parsed), 2)
+        self.assertEqual(len(parsed), 5)
         self.assertEqual(parsed[0]["bookie"], "BetKing")
         self.assertEqual(parsed[0]["home"], "Lagos United")
         self.assertEqual(parsed[0]["away"], "Abuja FC")
-        self.assertEqual(parsed[0]["market"], "Over/Under 2.5 Goals")
+        self.assertEqual(parsed[0]["market"], "Over/Under 1.5 Goals")
+        self.assertEqual((parsed[0]["outcome_a"], parsed[0]["outcome_b"]), (1.4, 2.8))
+        self.assertEqual(parsed[1]["market"], "Over/Under 3.5 Goals")
+        self.assertEqual((parsed[1]["outcome_a"], parsed[1]["outcome_b"]), (2.4, 1.6))
+        self.assertEqual(parsed[2]["market"], "Over/Under 2.5 Goals")
+        self.assertEqual(
+            (parsed[2]["outcome_a"], parsed[2]["outcome_b"]),
+            (1.9, 2.0),
+        )
+        self.assertEqual(parsed[3]["market"], "Both Teams to Score")
+        self.assertEqual((parsed[3]["outcome_a"], parsed[3]["outcome_b"]), (1.8, 2.1))
+        self.assertEqual(parsed[4]["market"], "Draw No Bet")
+        self.assertEqual((parsed[4]["outcome_a"], parsed[4]["outcome_b"]), (1.7, 2.2))
         self.assertEqual(parsed[0]["league"], "Nigeria - Premier League")
-        self.assertEqual((parsed[0]["outcome_a"], parsed[0]["outcome_b"]), (1.9, 2.0))
         self.assertEqual(parsed[0]["url"], "https://www.betking.com/")
-        self.assertEqual(parsed[1]["market"], "Both Teams to Score")
-        self.assertEqual((parsed[1]["outcome_a"], parsed[1]["outcome_b"]), (1.8, 2.1))
 
     def test_betking_maps_gg_ng_to_btts(self) -> None:
         payload = {
