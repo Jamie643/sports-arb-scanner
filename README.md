@@ -45,9 +45,12 @@ be alerted again. The long-running FastAPI scanner only deduplicates in memory
 for the lifetime of its process. No cache is needed for the stateless batch
 workflow.
 
-Configure repository Actions secrets for `BETPAWA_FEED_URL`, `BET9JA_FEED_URL`,
-`TELEGRAM_BOT_TOKEN`, and `TELEGRAM_CHAT_ID`. `BETKING_FEED_URL` is optional.
-Optional secrets `DEFAULT_STAKE_NGN`, `MAX_LOOKAHEAD_HOURS`,
+Configure `BET9JA_FEED_URL` and `TELEGRAM_BOT_TOKEN` as repository Actions
+secrets. `BETPAWA_FEED_URL`, `BETKING_FEED_URL`, and `TELEGRAM_CHAT_ID` can be
+repository secrets or variables; a secret takes precedence when both are set.
+`BETKING_FEED_URL` is optional. When `BET9JA_FEED_URL` is unset, the batch scan
+logs a skip and proceeds with an empty Bet9ja feed. Optional secrets
+`DEFAULT_STAKE_NGN`, `MAX_LOOKAHEAD_HOURS`,
 `MAX_ARBITRAGE_PROFIT_PCT`, `MIN_MINUTES_TO_KICKOFF`, and `NOTIFY_EMPTY`
 default to `10000`, `24.0`, `15.0`, `15`, and `false`, respectively.
 

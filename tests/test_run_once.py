@@ -5,6 +5,46 @@ from run_once import main
 
 
 class RunOnceTests(unittest.TestCase):
+    def test_skips_bet9ja_cleanly_when_feed_is_unset(self) -> None:
+        with (
+            patch("run_once.BET9JA_FEED_URL", ""),
+            patch("run_once.BETKING_FEED_URL", ""),
+            patch("run_once.fetch_betpawa_matches", return_value=[]),
+            patch("run_once.fetch_bet9ja_matches") as fetch_bet9ja,
+            patch("run_once.fetch_betking_matches") as fetch_betking,
+            patch("run_once.find_arbitrage", return_value=[]) as find_arbitrage,
+            patch("run_once.logger.info") as logger_info,
+        ):
+            result = main()
+
+        self.assertEqual(result, 0)
+        fetch_bet9ja.assert_not_called()
+        fetch_betking.assert_not_called()
+        self.assertEqual(find_arbitrage.call_args.args[1], [])
+        self.assertIn(
+            ("Skipping Bet9ja: BET9JA_FEED_URL is unset",),
+            [call.args for call in logger_info.call_args_list],
+        )
+
+    def test_fetches_bet9ja_when_feed_is_configured(self) -> None:
+        bet9ja_matches = [{"bookie": "Bet9ja", "home": "Team A"}]
+        with (
+            patch("run_once.BET9JA_FEED_URL", "https://feed.example/bet9ja"),
+            patch("run_once.BETKING_FEED_URL", ""),
+            patch("run_once.fetch_betpawa_matches", return_value=[]),
+            patch(
+                "run_once.fetch_bet9ja_matches",
+                return_value=bet9ja_matches,
+            ) as fetch_bet9ja,
+            patch("run_once.fetch_betking_matches"),
+            patch("run_once.find_arbitrage", return_value=[]) as find_arbitrage,
+        ):
+            result = main()
+
+        self.assertEqual(result, 0)
+        fetch_bet9ja.assert_called_once_with()
+        self.assertEqual(find_arbitrage.call_args.args[1], bet9ja_matches)
+
     def test_sends_each_opportunity_and_continues_after_telegram_errors(self) -> None:
         opportunities = [
             {"home": "Team A", "away": "Team B"},

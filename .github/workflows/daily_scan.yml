@@ -29,11 +29,11 @@ jobs:
       - name: Run daily scan
         run: python run_once.py
         env:
-          BETPAWA_FEED_URL: ${{ secrets.BETPAWA_FEED_URL }}
+          BETPAWA_FEED_URL: ${{ secrets.BETPAWA_FEED_URL || vars.BETPAWA_FEED_URL }}
           BET9JA_FEED_URL: ${{ secrets.BET9JA_FEED_URL }}
-          BETKING_FEED_URL: ${{ secrets.BETKING_FEED_URL }}
+          BETKING_FEED_URL: ${{ secrets.BETKING_FEED_URL || vars.BETKING_FEED_URL }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID || vars.TELEGRAM_CHAT_ID }}
           DEFAULT_STAKE_NGN: ${{ secrets.DEFAULT_STAKE_NGN || '10000' }}
           MAX_LOOKAHEAD_HOURS: ${{ secrets.MAX_LOOKAHEAD_HOURS || '24.0' }}
           MAX_ARBITRAGE_PROFIT_PCT: ${{ secrets.MAX_ARBITRAGE_PROFIT_PCT || '15.0' }}

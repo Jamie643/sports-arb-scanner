@@ -10,6 +10,7 @@ from scrapers.betking import fetch_matches as fetch_betking_matches
 from scrapers.betpawa import fetch_matches as fetch_betpawa_matches
 from services.telegram import send_alert, send_message
 from settings import (
+    BET9JA_FEED_URL,
     BETKING_FEED_URL,
     DEFAULT_STAKE_NGN,
     MAX_ARBITRAGE_PROFIT_PCT,
@@ -38,7 +39,11 @@ def _fetch_matches(
 
 def main() -> int:
     betpawa_matches = _fetch_matches("Betpawa", fetch_betpawa_matches)
-    bet9ja_matches = _fetch_matches("Bet9ja", fetch_bet9ja_matches)
+    if BET9JA_FEED_URL:
+        bet9ja_matches = _fetch_matches("Bet9ja", fetch_bet9ja_matches)
+    else:
+        logger.info("Skipping Bet9ja: BET9JA_FEED_URL is unset")
+        bet9ja_matches = []
     if BETKING_FEED_URL:
         betking_matches = _fetch_matches("BetKing", fetch_betking_matches)
     else:
