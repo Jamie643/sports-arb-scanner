@@ -141,6 +141,60 @@ class RunOnceTests(unittest.TestCase):
                         send_message.call_args.args[0],
                     )
 
+    def test_logs_why_empty_scan_did_not_send_telegram(self) -> None:
+        with (
+            patch("run_once.NOTIFY_EMPTY", False),
+            patch("run_once.BET9JA_FEED_URL", ""),
+            patch("run_once.BETKING_FEED_URL", ""),
+            patch("run_once.fetch_betpawa_matches", return_value=[]),
+            patch("run_once.find_arbitrage", return_value=[]),
+            patch(
+                "run_once.validate_telegram_credentials",
+                side_effect=RuntimeError("TELEGRAM_BOT_TOKEN is missing"),
+            ),
+            patch("run_once.logger.warning") as logger_warning,
+            patch("run_once.logger.info") as logger_info,
+            patch("run_once.send_message") as send_message,
+        ):
+            result = main()
+
+        self.assertEqual(result, 0)
+        self.assertEqual(
+            logger_warning.call_args.args[0],
+            "Telegram is not configured: %s",
+        )
+        self.assertEqual(
+            str(logger_warning.call_args.args[1]),
+            "TELEGRAM_BOT_TOKEN is missing",
+        )
+        self.assertIn(
+            (
+                "Telegram message skipped: no arbitrage opportunities and "
+                "NOTIFY_EMPTY is false",
+            ),
+            [call.args for call in logger_info.call_args_list],
+        )
+        send_message.assert_not_called()
+
+    def test_logs_successful_alert_delivery(self) -> None:
+        opportunity = {"home": "Home FC", "away": "Away FC"}
+        with (
+            patch("run_once.BET9JA_FEED_URL", ""),
+            patch("run_once.BETKING_FEED_URL", ""),
+            patch("run_once.fetch_betpawa_matches", return_value=[]),
+            patch("run_once.find_arbitrage", return_value=[opportunity]),
+            patch("run_once.send_alert") as send_alert,
+            patch("run_once.logger.info") as logger_info,
+        ):
+            result = main()
+
+        self.assertEqual(result, 0)
+        send_alert.assert_called_once_with(opportunity)
+        self.assertIn(
+            ("Telegram alert delivered for %s vs %s", "Home FC", "Away FC"),
+            [call.args for call in logger_info.call_args_list],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

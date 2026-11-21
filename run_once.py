@@ -8,7 +8,11 @@ from engine.arbitrage import count_matched_pairs, find_arbitrage
 from scrapers.bet9ja import fetch_matches as fetch_bet9ja_matches
 from scrapers.betking import fetch_matches as fetch_betking_matches
 from scrapers.betpawa import fetch_matches as fetch_betpawa_matches
-from services.telegram import send_alert, send_message
+from services.telegram import (
+    send_alert,
+    send_message,
+    validate_telegram_credentials,
+)
 from settings import (
     BET9JA_FEED_URL,
     BETKING_FEED_URL,
@@ -85,6 +89,11 @@ def main() -> int:
     for opportunity in opportunities:
         try:
             send_alert(opportunity)
+            logger.info(
+                "Telegram alert delivered for %s vs %s",
+                opportunity.get("home", "unknown team"),
+                opportunity.get("away", "unknown team"),
+            )
         except Exception:
             logger.exception(
                 "Could not send Telegram alert for %s vs %s",
@@ -101,8 +110,18 @@ def main() -> int:
                 f"Betpawa rows: {len(betpawa_matches)}; "
                 f"matched fixtures: {matched_pairs}; arbs found: 0."
             )
+            logger.info("Telegram empty-scan notification delivered")
         except Exception:
             logger.exception("Could not send empty-scan Telegram notification")
+    elif not opportunities:
+        try:
+            validate_telegram_credentials()
+        except RuntimeError as exc:
+            logger.warning("Telegram is not configured: %s", exc)
+        logger.info(
+            "Telegram message skipped: no arbitrage opportunities and "
+            "NOTIFY_EMPTY is false"
+        )
 
     return 0
 

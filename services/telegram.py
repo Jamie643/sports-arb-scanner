@@ -1,8 +1,28 @@
+import re
 from typing import Any
 
 import requests
 
 from settings import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+
+
+_BOT_TOKEN_PATTERN = re.compile(r"^\d+:[A-Za-z0-9_-]+$")
+
+
+def validate_telegram_credentials() -> tuple[str, str]:
+    token = (TELEGRAM_BOT_TOKEN or "").strip()
+    chat_id = (TELEGRAM_CHAT_ID or "").strip()
+    if not token:
+        raise RuntimeError("TELEGRAM_BOT_TOKEN is missing")
+    if not chat_id:
+        raise RuntimeError("TELEGRAM_CHAT_ID is missing")
+    if token == "replace_with_bot_token" or chat_id == "replace_with_chat_id":
+        raise RuntimeError("Telegram placeholder credentials must be replaced")
+    if not _BOT_TOKEN_PATTERN.fullmatch(token):
+        raise RuntimeError("TELEGRAM_BOT_TOKEN has an invalid format")
+    if any(character.isspace() for character in chat_id):
+        raise RuntimeError("TELEGRAM_CHAT_ID must not contain whitespace")
+    return token, chat_id
 
 
 def format_alert(opportunity: dict[str, Any]) -> str:
@@ -37,20 +57,29 @@ def format_alert(opportunity: dict[str, Any]) -> str:
 
 
 def send_message(message: str) -> None:
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        raise RuntimeError("Telegram bot token and chat ID must be configured")
-    if (
-        TELEGRAM_BOT_TOKEN == "replace_with_bot_token"
-        or TELEGRAM_CHAT_ID == "replace_with_chat_id"
-    ):
-        raise RuntimeError("Replace the Telegram placeholder values in .env")
+    token, chat_id = validate_telegram_credentials()
 
-    response = requests.post(
-        f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
-        json={"chat_id": TELEGRAM_CHAT_ID, "text": message},
-        timeout=10,
-    )
-    response.raise_for_status()
+    try:
+        response = requests.post(
+            f"https://api.telegram.org/bot{token}/sendMessage",
+            json={"chat_id": chat_id, "text": message},
+            timeout=10,
+        )
+        response.raise_for_status()
+    except requests.RequestException as exc:
+        status = getattr(getattr(exc, "response", None), "status_code", None)
+        if status is not None:
+            raise RuntimeError(f"Telegram API returned HTTP {status}") from None
+        raise RuntimeError(
+            f"Telegram API request failed ({type(exc).__name__})"
+        ) from None
+
+    try:
+        result = response.json()
+    except ValueError:
+        raise RuntimeError("Telegram API returned invalid JSON") from None
+    if not isinstance(result, dict) or result.get("ok") is not True:
+        raise RuntimeError("Telegram API rejected the message (ok was not true)")
 
 
 def send_alert(opportunity: dict[str, Any]) -> None:
