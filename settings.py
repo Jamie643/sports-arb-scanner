@@ -103,10 +103,22 @@ def _read_min_minutes_to_kickoff() -> int:
     return minutes
 
 
+def _read_notify_empty() -> bool:
+    value = os.getenv("NOTIFY_EMPTY")
+    if value is None or not value.strip():
+        return True
+
+    normalized = value.strip().casefold()
+    if normalized not in {"true", "false"}:
+        raise ValueError("NOTIFY_EMPTY must be true or false")
+    return normalized == "true"
+
+
 DEFAULT_STAKE_NGN = _read_default_stake()
 MAX_LOOKAHEAD_HOURS = _read_max_lookahead_hours()
 MAX_ARBITRAGE_PROFIT_PCT = _read_max_arbitrage_profit_pct()
 MIN_MINUTES_TO_KICKOFF = _read_min_minutes_to_kickoff()
+NOTIFY_EMPTY = _read_notify_empty()
 MAX_KICKOFF_DIFF_MINUTES = 30
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")

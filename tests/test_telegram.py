@@ -3,10 +3,32 @@ from unittest.mock import Mock, patch
 
 import requests
 
-from services.telegram import send_message, validate_telegram_credentials
+from services.telegram import (
+    format_empty_scan_notification,
+    send_message,
+    validate_telegram_credentials,
+)
 
 
 class TelegramTests(unittest.TestCase):
+    def test_empty_scan_message_is_a_distinct_heartbeat_with_counts(self) -> None:
+        message = format_empty_scan_notification(
+            lookahead_hours=24,
+            betking_rows=12,
+            betpawa_rows=34,
+            bet9ja_rows=5,
+            matched_pairs=3,
+        )
+
+        self.assertIn("SCAN HEARTBEAT — NO ARBITRAGE FOUND", message)
+        self.assertIn("Opportunities found: 0", message)
+        self.assertIn("BetKing: 12", message)
+        self.assertIn("Betpawa: 34", message)
+        self.assertIn("Bet9ja: 5", message)
+        self.assertIn("Matched fixture pairs: 3", message)
+        self.assertIn("Arbitrage opportunities: 0", message)
+        self.assertNotIn("ARBITRAGE OPPORTUNITY", message)
+
     def test_rejects_missing_credentials_without_sending(self) -> None:
         with (
             patch("services.telegram.TELEGRAM_BOT_TOKEN", "  "),

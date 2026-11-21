@@ -6,6 +6,7 @@ from settings import (
     DEFAULT_BETKING_FEED_URL,
     DEFAULT_BETPAWA_FEED_URL,
     _read_feed_url,
+    _read_notify_empty,
 )
 
 
@@ -52,6 +53,18 @@ class FeedUrlSettingsTests(unittest.TestCase):
             DEFAULT_BETPAWA_FEED_URL,
             "https://www.betpawa.ng/api/sportsbook/v4/events/lists/by-queries",
         )
+
+
+class NotifyEmptySettingsTests(unittest.TestCase):
+    def test_defaults_to_true_when_unset_or_blank(self) -> None:
+        for environment in ({}, {"NOTIFY_EMPTY": "  "}):
+            with self.subTest(environment=environment):
+                with patch.dict(os.environ, environment, clear=True):
+                    self.assertTrue(_read_notify_empty())
+
+    def test_explicit_false_disables_empty_notifications(self) -> None:
+        with patch.dict(os.environ, {"NOTIFY_EMPTY": " false "}, clear=True):
+            self.assertFalse(_read_notify_empty())
 
 
 if __name__ == "__main__":

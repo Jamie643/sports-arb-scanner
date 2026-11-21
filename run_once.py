@@ -1,5 +1,4 @@
 import logging
-import os
 from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
@@ -9,6 +8,7 @@ from scrapers.bet9ja import fetch_matches as fetch_bet9ja_matches
 from scrapers.betking import fetch_matches as fetch_betking_matches
 from scrapers.betpawa import fetch_matches as fetch_betpawa_matches
 from services.telegram import (
+    format_empty_scan_notification,
     send_alert,
     send_message,
     validate_telegram_credentials,
@@ -20,12 +20,12 @@ from settings import (
     MAX_ARBITRAGE_PROFIT_PCT,
     MAX_LOOKAHEAD_HOURS,
     MIN_MINUTES_TO_KICKOFF,
+    NOTIFY_EMPTY,
 )
 
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-NOTIFY_EMPTY = os.getenv("NOTIFY_EMPTY", "false").strip().casefold() == "true"
 
 
 def _fetch_matches(
@@ -104,11 +104,13 @@ def main() -> int:
     if not opportunities and NOTIFY_EMPTY:
         try:
             send_message(
-                "Daily scan complete: no arbitrage opportunities found "
-                f"within the next {MAX_LOOKAHEAD_HOURS:g} hours. "
-                f"BetKing rows: {len(betking_matches)}; "
-                f"Betpawa rows: {len(betpawa_matches)}; "
-                f"matched fixtures: {matched_pairs}; arbs found: 0."
+                format_empty_scan_notification(
+                    lookahead_hours=MAX_LOOKAHEAD_HOURS,
+                    betking_rows=len(betking_matches),
+                    betpawa_rows=len(betpawa_matches),
+                    bet9ja_rows=len(bet9ja_matches),
+                    matched_pairs=matched_pairs,
+                )
             )
             logger.info("Telegram empty-scan notification delivered")
         except Exception:

@@ -136,10 +136,14 @@ class RunOnceTests(unittest.TestCase):
                 send_alert.assert_not_called()
                 self.assertEqual(send_message.call_count, int(notify_empty))
                 if notify_empty:
+                    message = send_message.call_args.args[0]
                     self.assertIn(
-                        "no arbitrage opportunities",
-                        send_message.call_args.args[0],
+                        "SCAN HEARTBEAT — NO ARBITRAGE FOUND",
+                        message,
                     )
+                    self.assertIn("Opportunities found: 0", message)
+                    self.assertIn("Betpawa: 0", message)
+                    self.assertIn("Matched fixture pairs: 0", message)
 
     def test_logs_why_empty_scan_did_not_send_telegram(self) -> None:
         with (

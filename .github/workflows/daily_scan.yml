@@ -36,4 +36,4 @@ jobs:
           MAX_LOOKAHEAD_HOURS: ${{ secrets.MAX_LOOKAHEAD_HOURS || '24.0' }}
           MAX_ARBITRAGE_PROFIT_PCT: ${{ secrets.MAX_ARBITRAGE_PROFIT_PCT || '15.0' }}
           MIN_MINUTES_TO_KICKOFF: ${{ secrets.MIN_MINUTES_TO_KICKOFF || '15' }}
-          NOTIFY_EMPTY: ${{ secrets.NOTIFY_EMPTY || 'false' }}
+          NOTIFY_EMPTY: ${{ secrets.NOTIFY_EMPTY || 'true' }}

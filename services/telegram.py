@@ -56,6 +56,27 @@ def format_alert(opportunity: dict[str, Any]) -> str:
     )
 
 
+def format_empty_scan_notification(
+    *,
+    lookahead_hours: float,
+    betking_rows: int,
+    betpawa_rows: int,
+    bet9ja_rows: int,
+    matched_pairs: int,
+) -> str:
+    return (
+        "📡 SCAN HEARTBEAT — NO ARBITRAGE FOUND\n\n"
+        "Opportunities found: 0\n"
+        f"Lookahead: {lookahead_hours:g} hours\n\n"
+        "Rows scanned:\n"
+        f"BetKing: {betking_rows}\n"
+        f"Betpawa: {betpawa_rows}\n"
+        f"Bet9ja: {bet9ja_rows}\n"
+        f"Matched fixture pairs: {matched_pairs}\n"
+        "Arbitrage opportunities: 0"
+    )
+
+
 def send_message(message: str) -> None:
     token, chat_id = validate_telegram_credentials()
 

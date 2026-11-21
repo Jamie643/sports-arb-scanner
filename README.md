@@ -22,7 +22,9 @@ JSON endpoints you are authorized to access.
 Run one scan pass with `python run_once.py`. It checks pre-match opportunities
 from the current UTC time through `MAX_LOOKAHEAD_HOURS` (default `24.0`) and
 sends alerts to Telegram. Set `NOTIFY_EMPTY=true` to send a Telegram note when
-a successful scan finds no opportunities; it defaults to `false`.
+a scan finds no opportunities; this is enabled by default. The message is a
+distinct scan heartbeat showing zero opportunities and the feed/match counts.
+Set `NOTIFY_EMPTY=false` to disable these empty-scan notifications.
 Opportunities above `MAX_ARBITRAGE_PROFIT_PCT` ROI (default `15.0%`) and
 matches kicking off in less than `MIN_MINUTES_TO_KICKOFF` (default `15`)
 minutes are skipped. Fixtures match only when home and away names match in
@@ -55,7 +57,7 @@ Actions secrets (the chat ID can also be a repository variable). When
 empty Bet9ja feed. Optional secrets
 `DEFAULT_STAKE_NGN`, `MAX_LOOKAHEAD_HOURS`,
 `MAX_ARBITRAGE_PROFIT_PCT`, `MIN_MINUTES_TO_KICKOFF`, and `NOTIFY_EMPTY`
-default to `10000`, `24.0`, `15.0`, `15`, and `false`, respectively.
+default to `10000`, `24.0`, `15.0`, `15`, and `true`, respectively.
 
 ## Feed format
 
