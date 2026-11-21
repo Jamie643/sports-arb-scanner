@@ -29,13 +29,27 @@ minutes are skipped. Fixtures match only when home and away names match in
 their respective positions; kickoff times are at most 30 minutes apart. When
 both feeds provide a league, those names must also fuzzy-match.
 
-The GitHub Actions workflow runs daily at 07:00 UTC (08:00 WAT) and supports
-manual runs through `workflow_dispatch`. Configure repository Actions secrets
-for `BETPAWA_FEED_URL`, `BET9JA_FEED_URL`, `TELEGRAM_BOT_TOKEN`, and
-`TELEGRAM_CHAT_ID`. `BETKING_FEED_URL` is optional. Optional secrets
-`DEFAULT_STAKE_NGN`, `MAX_LOOKAHEAD_HOURS`, `MAX_ARBITRAGE_PROFIT_PCT`,
-`MIN_MINUTES_TO_KICKOFF`, and `NOTIFY_EMPTY` default to `10000`, `24.0`,
-`15.0`, `15`, and `false`, respectively.
+The GitHub Actions workflow runs four times daily:
+
+| WAT | UTC |
+| --- | --- |
+| 08:00 | 07:00 |
+| 12:00 | 11:00 |
+| 15:30 | 14:30 |
+| 19:30 | 18:30 |
+
+Manual runs are also available through `workflow_dispatch`. Each Actions
+invocation is an independent one-shot scan: it does not persist Telegram alert
+deduplication between runs, so an opportunity still present at a later scan may
+be alerted again. The long-running FastAPI scanner only deduplicates in memory
+for the lifetime of its process. No cache is needed for the stateless batch
+workflow.
+
+Configure repository Actions secrets for `BETPAWA_FEED_URL`, `BET9JA_FEED_URL`,
+`TELEGRAM_BOT_TOKEN`, and `TELEGRAM_CHAT_ID`. `BETKING_FEED_URL` is optional.
+Optional secrets `DEFAULT_STAKE_NGN`, `MAX_LOOKAHEAD_HOURS`,
+`MAX_ARBITRAGE_PROFIT_PCT`, `MIN_MINUTES_TO_KICKOFF`, and `NOTIFY_EMPTY`
+default to `10000`, `24.0`, `15.0`, `15`, and `false`, respectively.
 
 ## Feed format
 
