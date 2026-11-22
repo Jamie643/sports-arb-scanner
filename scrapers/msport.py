@@ -28,6 +28,7 @@ _MSPORT_SPORTS = {
     "sr:sport:2": "Basketball",
     "sr:sport:5": "Tennis",
 }
+_MSPORT_MAX_EVENTS_PER_SPORT = 2_000
 
 
 def _native_events(payload: Any) -> list[dict[str, Any]] | None:
@@ -248,7 +249,7 @@ def parse_payload(payload: Any) -> list[dict[str, Any]]:
 def _deduplicate_matches(
     matches: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    unique: dict[tuple[str, str, str, str, str], dict[str, Any]] = {}
+    unique: dict[tuple[str, str, str, str, str, str], dict[str, Any]] = {}
     for match in matches:
         key = (
             match["sport"],
@@ -256,6 +257,7 @@ def _deduplicate_matches(
             match["away"].casefold(),
             match["kickoff"],
             match["market"],
+            match.get("league", "").casefold(),
         )
         unique.setdefault(key, match)
     return list(unique.values())
@@ -275,9 +277,12 @@ def fetch_matches() -> list[dict[str, Any]]:
     for sport_id in _MSPORT_SPORTS:
         response = curl_requests.get(
             feed_url,
-            params={"sportId": sport_id},
+            params={
+                "sportId": sport_id,
+                "limit": _MSPORT_MAX_EVENTS_PER_SPORT,
+            },
             headers=_MSPORT_HEADERS,
-            timeout=15,
+            timeout=30,
         )
         response.raise_for_status()
         matches.extend(parse_payload(response.json()))

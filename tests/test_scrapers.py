@@ -1109,6 +1109,48 @@ class ScraperAdapterTests(unittest.TestCase):
         for call in mocked_get.call_args_list:
             self.assertEqual(call.kwargs["headers"]["OperId"], "2")
             self.assertEqual(call.kwargs["headers"]["Accept"], "application/json")
+            self.assertEqual(call.kwargs["params"]["limit"], 2_000)
+
+    def test_msport_extracts_and_deduplicates_a_fuller_event_list(self) -> None:
+        events = [
+            {
+                "eventId": f"event-{index}",
+                "sportId": "sr:sport:1",
+                "status": 0,
+                "bookingStatus": "Booked",
+                "homeTeam": f"Home {index}",
+                "awayTeam": f"Away {index}",
+                "startTime": 1_796_140_800_000,
+                "markets": [
+                    {
+                        "id": 29,
+                        "name": "GG/NG",
+                        "outcomes": [
+                            {"description": "Yes", "odds": "1.80", "isActive": 1},
+                            {"description": "No", "odds": "2.10", "isActive": 1},
+                        ],
+                    }
+                ],
+            }
+            for index in range(60)
+        ]
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = {
+            "bizCode": 10000,
+            "data": {"matchesCount": 60, "events": events},
+        }
+        with (
+            patch("scrapers.msport.MSPORT_FEED_URL", "https://feed.example/events"),
+            patch("scrapers.msport.curl_requests.get", return_value=response),
+        ):
+            matches = fetch_msport_matches()
+
+        self.assertEqual(len(matches), 60)
+        self.assertEqual(
+            {match["home"] for match in matches},
+            {f"Home {index}" for index in range(60)},
+        )
 
     def test_msport_loads_normalized_records_from_file_url(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

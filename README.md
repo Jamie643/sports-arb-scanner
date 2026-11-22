@@ -111,8 +111,8 @@ soccer, basketball, and tennis by their public sport IDs. It maps football
 Over/Under 1.5/2.5/3.5, Both Teams to Score, and Draw No Bet; basketball
 full-match Winner (including overtime) and total points (including overtime);
 and tennis match Winner. Live events, unavailable fixtures, and inactive
-selections are excluded. The public list API currently returns up to 50 events
-per sport request; normalized and local `file://` inputs are also supported.
+selections are excluded. The public list API is queried with a 2,000-event
+per-sport limit; normalized and local `file://` inputs are also supported.
 Bet9ja retains normalized-list support and accepts an optional provider parser
 through `parse_payload(payload, native_parser=...)`; unknown native payloads
 fail explicitly instead of being guessed.
