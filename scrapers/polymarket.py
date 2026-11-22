@@ -7,13 +7,19 @@ from typing import Any
 from urllib.parse import urlparse
 
 from curl_cffi import requests as curl_requests
+from rapidfuzz import fuzz
 
 from scrapers.common import (
     fetch_json_feed,
     is_normalized_payload,
     normalize_matches,
 )
-from settings import DEFAULT_POLYMARKET_FEED_URL, POLYMARKET_FEED_URL
+from settings import (
+    DEFAULT_POLYMARKET_FEED_URL,
+    MAX_LOOKAHEAD_HOURS,
+    MIN_MINUTES_TO_KICKOFF,
+    POLYMARKET_FEED_URL,
+)
 
 
 _GAMMA_HEADERS = {
@@ -25,16 +31,22 @@ _GAMMA_HEADERS = {
 }
 _CLOB_BASE_URL = "https://clob.polymarket.com"
 _POLYMARKET_HOME_URL = "https://polymarket.com/event/"
-_EVENT_PAGE_SIZE = 100
-_MAX_EVENT_PAGES = 5
+_EVENT_PAGE_SIZE = 10
+_MAX_EVENT_PAGES = 3
 _MAX_MARKETS = 500
 _CLOB_BOOK_BATCH_SIZE = 100
 _MATCHUP_PATTERN = re.compile(r"^\s*(.+?)\s+vs\.?\s+(.+?)\s*$", re.IGNORECASE)
+_NBA_SLUG_PATTERN = re.compile(
+    r"^(?:polyv2-)?nba-([^-]+)-([^-]+)-\d{4}-\d{2}-\d{2}$",
+    re.IGNORECASE,
+)
+_NBA_SLUG_PREFIX = re.compile(r"^(?:polyv2-)?nba-", re.IGNORECASE)
 _TOTAL_LINE_PATTERN = re.compile(
     r"(?:over\s*/\s*under|o\s*/\s*u)\s*(\d+(?:\.\d+)?)",
     re.IGNORECASE,
 )
 logger = logging.getLogger(__name__)
+_SPORT_TAG_IDS = ("28", "864", "100350")
 
 
 def _json_list(value: Any) -> list[Any]:
@@ -67,16 +79,143 @@ def _event_sport(event: dict[str, Any]) -> str | None:
     return None
 
 
-def _event_matchup(title: Any) -> tuple[str, str] | None:
+def _teams(event: dict[str, Any]) -> list[dict[str, Any]]:
+    teams = event.get("teams")
+    if not isinstance(teams, list):
+        return []
+    return [
+        team
+        for team in teams
+        if isinstance(team, dict) and str(team.get("name") or "").strip()
+    ]
+
+
+def _team_label_key(value: Any) -> str:
+    return re.sub(r"[\W_]+", "", str(value or "").casefold())
+
+
+def _team_aliases(team: dict[str, Any]) -> set[str]:
+    return {
+        str(team[key]).strip()
+        for key in ("name", "alias", "abbreviation", "shortName", "short_name")
+        if isinstance(team.get(key), str) and team[key].strip()
+    }
+
+
+def _team_index(label: str, teams: list[dict[str, Any]]) -> int | None:
+    normalized = _team_label_key(label)
+    if not normalized:
+        return None
+    exact = [
+        index
+        for index, team in enumerate(teams)
+        if any(_team_label_key(alias) == normalized for alias in _team_aliases(team))
+    ]
+    if len(exact) == 1:
+        return exact[0]
+    if exact:
+        return None
+
+    scores = [
+        max(
+            (fuzz.token_set_ratio(label, alias) for alias in _team_aliases(team)),
+            default=0,
+        )
+        for team in teams
+    ]
+    if not scores:
+        return None
+    best = max(scores)
+    if best < 95 or scores.count(best) != 1:
+        return None
+    return scores.index(best)
+
+
+def _team_index_by_abbreviation(
+    abbreviation: str,
+    teams: list[dict[str, Any]],
+) -> int | None:
+    normalized = _team_label_key(abbreviation)
+    found = [
+        index
+        for index, team in enumerate(teams)
+        if _team_label_key(team.get("abbreviation")) == normalized
+    ]
+    return found[0] if len(found) == 1 else None
+
+
+def _team_name(team: dict[str, Any], fallback: str) -> str:
+    return str(team.get("name") or team.get("alias") or fallback).strip()
+
+
+def _event_matchup(
+    event: dict[str, Any],
+    sport: str,
+) -> tuple[str, str, int | None, int | None] | None:
+    title = event.get("title")
     if not isinstance(title, str):
         return None
     match = _MATCHUP_PATTERN.fullmatch(title)
     if match is None:
         return None
-    home, away = match.group(1).strip(), match.group(2).strip()
-    if not home or not away or home.casefold() == away.casefold():
+    title_home, title_away = match.group(1).strip(), match.group(2).strip()
+    if (
+        not title_home
+        or not title_away
+        or title_home.casefold() == title_away.casefold()
+    ):
         return None
-    return home, away
+
+    teams = _teams(event)
+    home_index = _team_index(title_home, teams)
+    if home_index is None and ":" in title_home:
+        title_home = title_home.rsplit(":", maxsplit=1)[1].strip()
+        home_index = _team_index(title_home, teams)
+    away_index = _team_index(title_away, teams)
+
+    slug = str(event.get("slug") or "")
+    if sport == "Basketball" and _NBA_SLUG_PREFIX.match(slug):
+        nba_match = _NBA_SLUG_PATTERN.fullmatch(slug)
+        if nba_match is None:
+            return None
+        away_index = _team_index_by_abbreviation(nba_match.group(1), teams)
+        home_index = _team_index_by_abbreviation(nba_match.group(2), teams)
+        if (
+            home_index is None
+            or away_index is None
+            or home_index == away_index
+            or {home_index, away_index}
+            != {
+                _team_index(
+                    match.group(1).strip().rsplit(":", maxsplit=1)[-1],
+                    teams,
+                ),
+                _team_index(match.group(2).strip(), teams),
+            }
+        ):
+            return None
+        return (
+            _team_name(teams[home_index], title_away),
+            _team_name(teams[away_index], title_home),
+            home_index,
+            away_index,
+        )
+
+    if home_index is not None and away_index is not None:
+        if home_index == away_index:
+            return None
+        return (
+            _team_name(teams[home_index], title_home),
+            _team_name(teams[away_index], title_away),
+            home_index,
+            away_index,
+        )
+
+    if sport == "Tennis" and ":" in match.group(1):
+        title_home = match.group(1).rsplit(":", maxsplit=1)[1].strip()
+    if title_home.casefold() == title_away.casefold():
+        return None
+    return title_home, title_away, None, None
 
 
 def _parse_time(value: Any) -> datetime | None:
@@ -164,6 +303,7 @@ def _active(value: Any) -> bool:
 def _candidate_markets(
     payload: Any,
     now_utc: datetime,
+    sport_hint: str | None = None,
 ) -> list[dict[str, Any]]:
     if isinstance(payload, dict):
         events = payload.get("events")
@@ -176,19 +316,24 @@ def _candidate_markets(
 
     candidates: list[dict[str, Any]] = []
     seen: set[tuple[str, str]] = set()
-    latest = now_utc + timedelta(days=7)
+    earliest = now_utc + timedelta(minutes=MIN_MINUTES_TO_KICKOFF)
+    latest = now_utc + timedelta(hours=MAX_LOOKAHEAD_HOURS)
     for event in events:
         if not isinstance(event, dict):
             continue
         if not _active(event.get("active")) or _active(event.get("closed")):
             continue
-        sport = _event_sport(event)
-        matchup = _event_matchup(event.get("title"))
+        sport = _event_sport(event) or sport_hint
+        matchup = _event_matchup(event, sport) if sport else None
         markets = event.get("markets")
         if sport is None or matchup is None or not isinstance(markets, list):
             continue
-        kickoff = _parse_time(event.get("startTime") or event.get("eventDate"))
-        if kickoff is None or not now_utc < kickoff <= latest:
+        kickoff = _parse_time(
+            event.get("startTime")
+            or event.get("gameStartTime")
+            or event.get("eventDate")
+        )
+        if kickoff is None or not earliest <= kickoff <= latest:
             continue
 
         event_id = str(event.get("id") or event.get("slug") or event.get("title"))
@@ -206,16 +351,26 @@ def _candidate_markets(
             if len(outcomes) != 2 or len(token_ids) != 2:
                 continue
             token_by_side: dict[str, str] = {}
-            home, away = matchup
+            home, away, home_index, away_index = matchup
+            teams = _teams(event)
             for outcome, token_id in zip(outcomes, token_ids, strict=True):
                 if not isinstance(outcome, str) or not isinstance(token_id, str):
                     token_by_side = {}
                     break
                 normalized_outcome = outcome.strip().casefold()
                 if market_name == "Match Winner":
-                    if normalized_outcome == home.casefold():
+                    outcome_index = _team_index(outcome, teams)
+                    if outcome_index is not None and outcome_index == home_index:
+                        side = "home"
+                    elif outcome_index is not None and outcome_index == away_index:
+                        side = "away"
+                    elif normalized_outcome == home.casefold():
                         side = "home"
                     elif normalized_outcome == away.casefold():
+                        side = "away"
+                    elif normalized_outcome == "home" and home_index is not None:
+                        side = "home"
+                    elif normalized_outcome == "away" and away_index is not None:
                         side = "away"
                     else:
                         token_by_side = {}
@@ -241,6 +396,7 @@ def _candidate_markets(
             seen.add(identity)
             candidates.append(
                 {
+                    "identity": identity,
                     "sport": sport,
                     "home": home,
                     "away": away,
@@ -264,26 +420,30 @@ def _candidate_markets(
 def _fetch_event_pages(
     feed_url: str,
     now_utc: datetime,
+    tag_id: str | None = None,
 ) -> list[dict[str, Any]]:
-    start_min = now_utc.isoformat(timespec="seconds").replace("+00:00", "Z")
-    start_max = (now_utc + timedelta(days=7)).isoformat(
+    start_min = (
+        now_utc + timedelta(minutes=MIN_MINUTES_TO_KICKOFF)
+    ).isoformat(timespec="seconds").replace("+00:00", "Z")
+    start_max = (now_utc + timedelta(hours=MAX_LOOKAHEAD_HOURS)).isoformat(
         timespec="seconds"
     ).replace("+00:00", "Z")
     events: list[dict[str, Any]] = []
     seen: set[str] = set()
     for page in range(_MAX_EVENT_PAGES):
+        params = {
+            "active": "true",
+            "closed": "false",
+            "start_time_min": start_min,
+            "start_time_max": start_max,
+            "limit": _EVENT_PAGE_SIZE,
+            "offset": page * _EVENT_PAGE_SIZE,
+        }
+        if tag_id:
+            params["tag_id"] = tag_id
         response = curl_requests.get(
             feed_url,
-            params={
-                "active": "true",
-                "closed": "false",
-                "version": "v2",
-                "tag_id": "1",
-                "start_time_min": start_min,
-                "start_time_max": start_max,
-                "limit": _EVENT_PAGE_SIZE,
-                "offset": page * _EVENT_PAGE_SIZE,
-            },
+            params=params,
             headers=_GAMMA_HEADERS,
             timeout=30,
         )
@@ -403,8 +563,15 @@ def fetch_matches() -> list[dict[str, Any]]:
         return fetch_json_feed(feed_url, "Polymarket", parse_payload)
 
     scan_time = datetime.now(timezone.utc)
-    events = _fetch_event_pages(feed_url, scan_time)
-    candidates = _candidate_markets(events, scan_time)
+    candidates: list[dict[str, Any]] = []
+    seen_candidates: set[tuple[str, str]] = set()
+    for tag_id, sport in zip(_SPORT_TAG_IDS, ("Basketball", "Tennis", "Football")):
+        events = _fetch_event_pages(feed_url, scan_time, tag_id)
+        for candidate in _candidate_markets(events, scan_time, sport):
+            identity = candidate["identity"]
+            if identity not in seen_candidates:
+                seen_candidates.add(identity)
+                candidates.append(candidate)
     token_ids = list(
         dict.fromkeys(
             token_id

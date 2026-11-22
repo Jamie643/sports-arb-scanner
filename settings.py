@@ -96,7 +96,7 @@ def _read_max_arbitrage_profit_pct() -> float:
 
 
 def _read_min_minutes_to_kickoff() -> int:
-    value = os.getenv("MIN_MINUTES_TO_KICKOFF", "15")
+    value = os.getenv("MIN_MINUTES_TO_KICKOFF", "8")
     try:
         minutes = int(value)
     except ValueError as exc:

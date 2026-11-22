@@ -28,7 +28,7 @@ a scan finds no opportunities; this is enabled by default. The message is a
 distinct scan heartbeat showing zero opportunities and the feed/match counts.
 Set `NOTIFY_EMPTY=false` to disable these empty-scan notifications.
 Opportunities above `MAX_ARBITRAGE_PROFIT_PCT` ROI (default `15.0%`) and
-matches kicking off in less than `MIN_MINUTES_TO_KICKOFF` (default `15`)
+matches kicking off in less than `MIN_MINUTES_TO_KICKOFF` (default `8`)
 minutes are skipped. Fixtures match only when home and away names match in
 their respective positions; kickoff times are at most 30 minutes apart. When
 both feeds provide a league, those names must also fuzzy-match.
@@ -61,7 +61,9 @@ Actions secrets (the chat ID can also be a repository variable). When
 empty Bet9ja feed. Optional secrets
 `DEFAULT_STAKE_NGN`, `MAX_LOOKAHEAD_HOURS`,
 `MAX_ARBITRAGE_PROFIT_PCT`, `MIN_MINUTES_TO_KICKOFF`, and `NOTIFY_EMPTY`
-default to `10000`, `24.0`, `15.0`, `15`, and `true`, respectively.
+default to `10000`, `24.0`, `15.0`, `8`, and `true`, respectively. The
+8-minute kickoff buffer keeps a brief pre-lockout margin while allowing
+opportunities around 10 minutes before kickoff.
 
 ## Feed format
 

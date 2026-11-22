@@ -412,7 +412,7 @@ class ArbitrageTests(unittest.TestCase):
         now = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
         betpawa = []
         bet9ja = []
-        for home, minutes in (("Soon", 14), ("Ready", 15)):
+        for home, minutes in (("Soon", 7), ("Ready", 8), ("Ten Minutes", 10)):
             kickoff = (now + timedelta(minutes=minutes)).isoformat()
             betpawa.append(
                 {
@@ -435,11 +435,11 @@ class ArbitrageTests(unittest.TestCase):
 
         self.assertEqual(
             {opportunity["home"] for opportunity in opportunities},
-            {"Ready"},
+            {"Ready", "Ten Minutes"},
         )
         self.assertEqual(
             count_matched_pairs(betpawa, bet9ja, now_utc=now),
-            1,
+            2,
         )
 
     def test_realistic_over_under_and_btts_odds_for_two_bookmakers(self) -> None:

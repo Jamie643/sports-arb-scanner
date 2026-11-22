@@ -8,6 +8,7 @@ from settings import (
     DEFAULT_MSPORT_FEED_URL,
     DEFAULT_POLYMARKET_FEED_URL,
     _read_feed_url,
+    _read_min_minutes_to_kickoff,
     _read_notify_empty,
 )
 
@@ -76,6 +77,12 @@ class NotifyEmptySettingsTests(unittest.TestCase):
     def test_explicit_false_disables_empty_notifications(self) -> None:
         with patch.dict(os.environ, {"NOTIFY_EMPTY": " false "}, clear=True):
             self.assertFalse(_read_notify_empty())
+
+
+class KickoffSettingsTests(unittest.TestCase):
+    def test_minimum_kickoff_buffer_defaults_to_eight_minutes(self) -> None:
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(_read_min_minutes_to_kickoff(), 8)
 
 
 if __name__ == "__main__":

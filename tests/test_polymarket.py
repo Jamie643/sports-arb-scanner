@@ -22,15 +22,19 @@ class PolymarketScraperTests(unittest.TestCase):
         title: str,
         markets: list[dict[str, object]],
         event_id: str = "event-1",
+        slug: str | None = None,
+        kickoff: str | None = None,
+        teams: list[dict[str, str]] | None = None,
     ) -> dict[str, object]:
         return {
             "id": event_id,
-            "slug": f"event-{event_id}",
+            "slug": slug or f"event-{event_id}",
             "title": title,
-            "startTime": self.kickoff,
+            "startTime": kickoff or self.kickoff,
             "active": True,
             "closed": False,
             "tags": [{"label": sport}],
+            "teams": teams or [],
             "markets": markets,
         }
 
@@ -124,6 +128,99 @@ class PolymarketScraperTests(unittest.TestCase):
         self.assertEqual(rows[0]["sport"], "Tennis")
         self.assertEqual(rows[0]["market"], "Match Winner")
         self.assertEqual((rows[0]["outcome_a"], rows[0]["outcome_b"]), (2.5, 2.0))
+
+    def test_normalizes_nba_home_away_from_verified_slug_abbreviations(self) -> None:
+        event = self._event(
+            sport="Basketball",
+            title="Mia vs. Washington Wizards",
+            slug="nba-mia-was-2026-11-22",
+            teams=[
+                {"name": "Washington Wizards", "abbreviation": "WAS"},
+                {"name": "Miami Heat", "abbreviation": "MIA"},
+            ],
+            markets=[
+                self._market(
+                    market_type="moneyline",
+                    outcomes=["Mia", "Was"],
+                    tokens=["miami-token", "washington-token"],
+                    question="Mia vs. Washington Wizards",
+                )
+            ],
+        )
+
+        rows = parse_payload(
+            [event],
+            best_asks={"miami-token": 0.5, "washington-token": 0.4},
+            now_utc=self.now,
+        )
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["home"], "Washington Wizards")
+        self.assertEqual(rows[0]["away"], "Miami Heat")
+        self.assertEqual((rows[0]["outcome_a"], rows[0]["outcome_b"]), (2.5, 2.0))
+
+    def test_strips_tennis_tournament_prefix_using_team_metadata(self) -> None:
+        event = self._event(
+            sport="Tennis",
+            title="Ankara (Doubles): Hernandez/Wehnelt vs. Oetzbach/Wiskandt",
+            teams=[
+                {"name": "Hernandez/Wehnelt"},
+                {"name": "Oetzbach/Wiskandt"},
+            ],
+            markets=[
+                self._market(
+                    market_type="moneyline",
+                    outcomes=["Oetzbach/Wiskandt", "Hernandez/Wehnelt"],
+                    tokens=["team-two-token", "team-one-token"],
+                    question="Hernandez/Wehnelt vs. Oetzbach/Wiskandt",
+                )
+            ],
+        )
+
+        rows = parse_payload(
+            [event],
+            best_asks={"team-one-token": 0.4, "team-two-token": 0.5},
+            now_utc=self.now,
+        )
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["home"], "Hernandez/Wehnelt")
+        self.assertEqual(rows[0]["away"], "Oetzbach/Wiskandt")
+        self.assertEqual((rows[0]["outcome_a"], rows[0]["outcome_b"]), (2.5, 2.0))
+
+    def test_uses_eight_minute_kickoff_boundary_and_parses_utc_offsets(self) -> None:
+        market = self._market(
+            market_type="moneyline",
+            outcomes=["Home Hoops", "Away Hoops"],
+            tokens=["home-token", "away-token"],
+            question="Home Hoops vs. Away Hoops",
+        )
+        events = [
+            self._event(
+                sport="Basketball",
+                title="Home Hoops vs. Away Hoops",
+                event_id=f"event-{minutes}",
+                kickoff=(self.now + timedelta(minutes=minutes)).isoformat(),
+                markets=[market],
+            )
+            for minutes in (7, 8, 10)
+        ]
+
+        with patch("scrapers.polymarket.MIN_MINUTES_TO_KICKOFF", 8):
+            rows = parse_payload(
+                events,
+                best_asks={"home-token": 0.4, "away-token": 0.5},
+                now_utc=self.now,
+            )
+
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(
+            {row["kickoff"] for row in rows},
+            {
+                (self.now + timedelta(minutes=8)).isoformat(),
+                (self.now + timedelta(minutes=10)).isoformat(),
+            },
+        )
 
     def test_maps_unambiguous_totals_and_rejects_other_sports_or_lines(self) -> None:
         basketball = self._event(
@@ -281,6 +378,7 @@ class PolymarketScraperTests(unittest.TestCase):
             events = _fetch_event_pages(
                 "https://gamma-api.polymarket.com/events",
                 self.now,
+                tag_id="864",
             )
 
         self.assertEqual([event["id"] for event in events], [
@@ -291,6 +389,10 @@ class PolymarketScraperTests(unittest.TestCase):
         self.assertEqual(
             [call.kwargs["params"]["offset"] for call in get.call_args_list],
             [0, 2],
+        )
+        self.assertEqual(
+            [call.kwargs["params"]["tag_id"] for call in get.call_args_list],
+            ["864", "864"],
         )
 
     def test_fetch_matches_combines_gamma_events_and_clob_best_asks(self) -> None:
