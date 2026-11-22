@@ -37,5 +37,5 @@ jobs:
           DEFAULT_STAKE_NGN: ${{ secrets.DEFAULT_STAKE_NGN || '10000' }}
           MAX_LOOKAHEAD_HOURS: ${{ secrets.MAX_LOOKAHEAD_HOURS || '24.0' }}
           MAX_ARBITRAGE_PROFIT_PCT: ${{ secrets.MAX_ARBITRAGE_PROFIT_PCT || '15.0' }}
-          MIN_MINUTES_TO_KICKOFF: ${{ secrets.MIN_MINUTES_TO_KICKOFF || '8' }}
+          MIN_MINUTES_TO_KICKOFF: ${{ secrets.MIN_MINUTES_TO_KICKOFF || '10' }}
           NOTIFY_EMPTY: ${{ secrets.NOTIFY_EMPTY || 'true' }}

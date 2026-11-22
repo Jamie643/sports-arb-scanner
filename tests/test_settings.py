@@ -80,9 +80,9 @@ class NotifyEmptySettingsTests(unittest.TestCase):
 
 
 class KickoffSettingsTests(unittest.TestCase):
-    def test_minimum_kickoff_buffer_defaults_to_eight_minutes(self) -> None:
+    def test_minimum_kickoff_buffer_defaults_to_ten_minutes(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
-            self.assertEqual(_read_min_minutes_to_kickoff(), 8)
+            self.assertEqual(_read_min_minutes_to_kickoff(), 10)
 
 
 if __name__ == "__main__":

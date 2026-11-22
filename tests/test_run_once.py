@@ -128,7 +128,7 @@ class RunOnceTests(unittest.TestCase):
         )
         self.assertEqual(
             find_arbitrage.call_args.kwargs["min_minutes_to_kickoff"],
-            8,
+            10,
         )
         self.assertEqual(
             find_arbitrage.call_args.kwargs["msport_matches"],

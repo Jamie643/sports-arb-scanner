@@ -412,7 +412,7 @@ class ArbitrageTests(unittest.TestCase):
         now = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
         betpawa = []
         bet9ja = []
-        for home, minutes in (("Soon", 7), ("Ready", 8), ("Ten Minutes", 10)):
+        for home, minutes in (("Soon", 9), ("Ready", 10), ("Ten Minutes", 11)):
             kickoff = (now + timedelta(minutes=minutes)).isoformat()
             betpawa.append(
                 {
