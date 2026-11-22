@@ -18,6 +18,7 @@ class TelegramTests(unittest.TestCase):
             betpawa_rows=34,
             bet9ja_rows=5,
             matched_pairs=3,
+            msport_rows=8,
         )
 
         self.assertIn("SCAN HEARTBEAT — NO ARBITRAGE FOUND", message)
@@ -25,6 +26,7 @@ class TelegramTests(unittest.TestCase):
         self.assertIn("BetKing: 12", message)
         self.assertIn("Betpawa: 34", message)
         self.assertIn("Bet9ja: 5", message)
+        self.assertIn("MSport: 8", message)
         self.assertIn("Matched fixture pairs: 3", message)
         self.assertIn("Arbitrage opportunities: 0", message)
         self.assertNotIn("ARBITRAGE OPPORTUNITY", message)

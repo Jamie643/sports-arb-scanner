@@ -30,6 +30,7 @@ jobs:
         run: python run_once.py
         env:
           BET9JA_FEED_URL: ${{ secrets.BET9JA_FEED_URL }}
+          MSPORT_FEED_URL: ${{ secrets.MSPORT_FEED_URL || vars.MSPORT_FEED_URL }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID || vars.TELEGRAM_CHAT_ID }}
           DEFAULT_STAKE_NGN: ${{ secrets.DEFAULT_STAKE_NGN || '10000' }}

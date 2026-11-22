@@ -14,6 +14,10 @@ DEFAULT_BETKING_FEED_URL = (
 DEFAULT_BETPAWA_FEED_URL = (
     "https://www.betpawa.ng/api/sportsbook/v4/events/lists/by-queries"
 )
+DEFAULT_MSPORT_FEED_URL = (
+    "https://www.msport.com/api/ng/facts-center/query/frontend/"
+    "all-matches/next-7-days"
+)
 
 
 def _read_feed_url(name: str, default: str) -> str:
@@ -130,4 +134,8 @@ BET9JA_FEED_URL = os.getenv("BET9JA_FEED_URL")
 BETKING_FEED_URL = _read_feed_url(
     "BETKING_FEED_URL",
     DEFAULT_BETKING_FEED_URL,
+)
+MSPORT_FEED_URL = _read_feed_url(
+    "MSPORT_FEED_URL",
+    DEFAULT_MSPORT_FEED_URL,
 )

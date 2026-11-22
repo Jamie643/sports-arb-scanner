@@ -10,6 +10,7 @@ class RunOnceTests(unittest.TestCase):
             patch("run_once.BET9JA_FEED_URL", ""),
             patch("run_once.BETKING_FEED_URL", ""),
             patch("run_once.fetch_betpawa_matches", return_value=[]),
+            patch("run_once.fetch_msport_matches", return_value=[]),
             patch("run_once.fetch_bet9ja_matches") as fetch_bet9ja,
             patch("run_once.fetch_betking_matches") as fetch_betking,
             patch("run_once.find_arbitrage", return_value=[]) as find_arbitrage,
@@ -32,6 +33,7 @@ class RunOnceTests(unittest.TestCase):
             patch("run_once.BET9JA_FEED_URL", "https://feed.example/bet9ja"),
             patch("run_once.BETKING_FEED_URL", ""),
             patch("run_once.fetch_betpawa_matches", return_value=[]),
+            patch("run_once.fetch_msport_matches", return_value=[]),
             patch(
                 "run_once.fetch_bet9ja_matches",
                 return_value=bet9ja_matches,
@@ -54,6 +56,7 @@ class RunOnceTests(unittest.TestCase):
             patch("run_once.BETKING_FEED_URL", ""),
             patch("run_once.fetch_betpawa_matches", return_value=[]),
             patch("run_once.fetch_bet9ja_matches", return_value=[]),
+            patch("run_once.fetch_msport_matches", return_value=[]),
             patch("run_once.fetch_betking_matches") as fetch_betking,
             patch("run_once.find_arbitrage", return_value=opportunities),
             patch(
@@ -77,6 +80,10 @@ class RunOnceTests(unittest.TestCase):
             patch("run_once.fetch_betpawa_matches", return_value=[]),
             patch("run_once.fetch_bet9ja_matches", return_value=[]),
             patch(
+                "run_once.fetch_msport_matches",
+                return_value=[{"bookie": "MSport"}],
+            ),
+            patch(
                 "run_once.fetch_betking_matches",
                 return_value=betking_matches,
             ) as fetch_betking,
@@ -98,10 +105,12 @@ class RunOnceTests(unittest.TestCase):
         find_arbitrage.assert_called_once()
         self.assertIn(
             (
-                "Scan summary: betking_rows=%d betpawa_rows=%d matched_pairs=%d "
-                "arbs_found=%d",
+                "Scan summary: betking_rows=%d betpawa_rows=%d bet9ja_rows=%d "
+                "msport_rows=%d matched_pairs=%d arbs_found=%d",
                 1,
                 0,
+                0,
+                1,
                 2,
                 0,
             ),
@@ -115,6 +124,10 @@ class RunOnceTests(unittest.TestCase):
             find_arbitrage.call_args.kwargs["min_minutes_to_kickoff"],
             15,
         )
+        self.assertEqual(
+            find_arbitrage.call_args.kwargs["msport_matches"],
+            [{"bookie": "MSport"}],
+        )
 
     def test_empty_scan_message_is_controlled_by_notify_empty(self) -> None:
         for notify_empty in (False, True):
@@ -124,6 +137,7 @@ class RunOnceTests(unittest.TestCase):
                     patch("run_once.BETKING_FEED_URL", ""),
                     patch("run_once.fetch_betpawa_matches", return_value=[]),
                     patch("run_once.fetch_bet9ja_matches", return_value=[]),
+                    patch("run_once.fetch_msport_matches", return_value=[]),
                     patch("run_once.fetch_betking_matches") as fetch_betking,
                     patch("run_once.find_arbitrage", return_value=[]),
                     patch("run_once.send_alert") as send_alert,
@@ -143,6 +157,7 @@ class RunOnceTests(unittest.TestCase):
                     )
                     self.assertIn("Opportunities found: 0", message)
                     self.assertIn("Betpawa: 0", message)
+                    self.assertIn("MSport: 0", message)
                     self.assertIn("Matched fixture pairs: 0", message)
 
     def test_logs_why_empty_scan_did_not_send_telegram(self) -> None:
@@ -151,6 +166,7 @@ class RunOnceTests(unittest.TestCase):
             patch("run_once.BET9JA_FEED_URL", ""),
             patch("run_once.BETKING_FEED_URL", ""),
             patch("run_once.fetch_betpawa_matches", return_value=[]),
+            patch("run_once.fetch_msport_matches", return_value=[]),
             patch("run_once.find_arbitrage", return_value=[]),
             patch(
                 "run_once.validate_telegram_credentials",
@@ -186,6 +202,7 @@ class RunOnceTests(unittest.TestCase):
             patch("run_once.BET9JA_FEED_URL", ""),
             patch("run_once.BETKING_FEED_URL", ""),
             patch("run_once.fetch_betpawa_matches", return_value=[]),
+            patch("run_once.fetch_msport_matches", return_value=[]),
             patch("run_once.find_arbitrage", return_value=[opportunity]),
             patch("run_once.send_alert") as send_alert,
             patch("run_once.logger.info") as logger_info,
@@ -198,6 +215,21 @@ class RunOnceTests(unittest.TestCase):
             ("Telegram alert delivered for %s vs %s", "Home FC", "Away FC"),
             [call.args for call in logger_info.call_args_list],
         )
+
+    def test_msport_fetch_failure_does_not_abort_scan(self) -> None:
+        with (
+            patch("run_once.BET9JA_FEED_URL", ""),
+            patch("run_once.BETKING_FEED_URL", ""),
+            patch("run_once.fetch_betpawa_matches", return_value=[]),
+            patch("run_once.fetch_msport_matches", side_effect=RuntimeError("feed down")),
+            patch("run_once.find_arbitrage", return_value=[]) as find_arbitrage,
+            patch("run_once.send_message"),
+            patch("run_once.logger.exception"),
+        ):
+            result = main()
+
+        self.assertEqual(result, 0)
+        self.assertEqual(find_arbitrage.call_args.kwargs["msport_matches"], [])
 
 
 if __name__ == "__main__":

@@ -294,6 +294,34 @@ class ArbitrageTests(unittest.TestCase):
         self.assertEqual(opportunities[0]["leg_a"]["bookie"], "Betpawa")
         self.assertEqual(opportunities[0]["leg_b"]["bookie"], "BetKing")
 
+    def test_compares_msport_matches_with_other_bookmakers(self) -> None:
+        msport = [
+            {
+                **self.betpawa[0],
+                "bookie": "MSport",
+                "outcome_a": 1.9,
+                "outcome_b": 2.1,
+            }
+        ]
+
+        opportunities = find_arbitrage(
+            self.betpawa,
+            [],
+            msport_matches=msport,
+        )
+
+        self.assertEqual(len(opportunities), 1)
+        self.assertEqual(opportunities[0]["leg_a"]["bookie"], "Betpawa")
+        self.assertEqual(opportunities[0]["leg_b"]["bookie"], "MSport")
+        self.assertEqual(
+            count_matched_pairs(
+                self.betpawa,
+                [],
+                msport_matches=msport,
+            ),
+            1,
+        )
+
     def test_rejects_extreme_arbitrage_roi_above_configured_maximum(self) -> None:
         betpawa = [{**self.betpawa[0], "outcome_a": 3.0, "outcome_b": 3.0}]
         bet9ja = [{**self.bet9ja[0], "outcome_a": 3.0, "outcome_b": 3.0}]
@@ -552,8 +580,10 @@ class ArbitrageTests(unittest.TestCase):
         ]
         with (
             patch("main.BETKING_FEED_URL", "https://feed.example/betking"),
+            patch("main.MSPORT_FEED_URL", "https://feed.example/msport"),
             patch("main.fetch_betpawa_matches", return_value=[]),
             patch("main.fetch_bet9ja_matches", return_value=[]),
+            patch("main.fetch_msport_matches", return_value=[]),
             patch(
                 "main.fetch_betking_matches",
                 return_value=betking_matches,
@@ -571,8 +601,10 @@ class ArbitrageTests(unittest.TestCase):
     def test_scanner_uses_empty_betking_feed_when_unconfigured(self) -> None:
         with (
             patch("main.BETKING_FEED_URL", ""),
+            patch("main.MSPORT_FEED_URL", "https://feed.example/msport"),
             patch("main.fetch_betpawa_matches", return_value=[]),
             patch("main.fetch_bet9ja_matches", return_value=[]),
+            patch("main.fetch_msport_matches", return_value=[]),
             patch("main.fetch_betking_matches") as fetch_betking,
             patch("main.find_arbitrage", return_value=[]) as find_arbitrage,
         ):
@@ -583,6 +615,23 @@ class ArbitrageTests(unittest.TestCase):
             find_arbitrage.call_args.kwargs["betking_matches"],
             [],
         )
+
+    def test_scanner_continues_when_msport_fetch_fails(self) -> None:
+        with (
+            patch("main.BETKING_FEED_URL", ""),
+            patch("main.MSPORT_FEED_URL", "https://feed.example/msport"),
+            patch("main.fetch_betpawa_matches", return_value=[]),
+            patch("main.fetch_bet9ja_matches", return_value=[]),
+            patch("main.fetch_betking_matches"),
+            patch(
+                "main.fetch_msport_matches",
+                side_effect=RuntimeError("MSport unavailable"),
+            ),
+            patch("main.find_arbitrage", return_value=[]) as find_arbitrage,
+        ):
+            asyncio.run(scan_once(set()))
+
+        self.assertEqual(find_arbitrage.call_args.kwargs["msport_matches"], [])
 
     def test_failed_telegram_send_keeps_batch_running_and_is_not_deduplicated(self) -> None:
         betpawa = [
@@ -633,6 +682,7 @@ class ArbitrageTests(unittest.TestCase):
         alerted = set()
         with (
             patch("main.BETKING_FEED_URL", ""),
+            patch("main.MSPORT_FEED_URL", "https://feed.example/msport"),
             patch(
                 "main.fetch_betpawa_matches",
                 return_value=betpawa,
@@ -641,6 +691,7 @@ class ArbitrageTests(unittest.TestCase):
                 "main.fetch_bet9ja_matches",
                 return_value=bet9ja,
             ),
+            patch("main.fetch_msport_matches", return_value=[]),
             patch(
                 "main.send_alert",
                 side_effect=RuntimeError("Telegram unavailable"),

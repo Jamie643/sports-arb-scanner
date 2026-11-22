@@ -5,6 +5,7 @@ from unittest.mock import patch
 from settings import (
     DEFAULT_BETKING_FEED_URL,
     DEFAULT_BETPAWA_FEED_URL,
+    DEFAULT_MSPORT_FEED_URL,
     _read_feed_url,
     _read_notify_empty,
 )
@@ -52,6 +53,11 @@ class FeedUrlSettingsTests(unittest.TestCase):
         self.assertEqual(
             DEFAULT_BETPAWA_FEED_URL,
             "https://www.betpawa.ng/api/sportsbook/v4/events/lists/by-queries",
+        )
+        self.assertEqual(
+            DEFAULT_MSPORT_FEED_URL,
+            "https://www.msport.com/api/ng/facts-center/query/frontend/"
+            "all-matches/next-7-days",
         )
 
 

@@ -7,6 +7,7 @@ from engine.arbitrage import count_matched_pairs, find_arbitrage
 from scrapers.bet9ja import fetch_matches as fetch_bet9ja_matches
 from scrapers.betking import fetch_matches as fetch_betking_matches
 from scrapers.betpawa import fetch_matches as fetch_betpawa_matches
+from scrapers.msport import fetch_matches as fetch_msport_matches
 from services.telegram import (
     format_empty_scan_notification,
     send_alert,
@@ -53,6 +54,7 @@ def main() -> int:
     else:
         logger.info("Skipping BetKing: BETKING_FEED_URL is unset")
         betking_matches = []
+    msport_matches = _fetch_matches("MSport", fetch_msport_matches)
 
     scan_time = datetime.now(timezone.utc)
     try:
@@ -60,6 +62,7 @@ def main() -> int:
             betpawa_matches,
             bet9ja_matches,
             betking_matches=betking_matches,
+            msport_matches=msport_matches,
             max_lookahead_hours=MAX_LOOKAHEAD_HOURS,
             min_minutes_to_kickoff=MIN_MINUTES_TO_KICKOFF,
             now_utc=scan_time,
@@ -71,6 +74,7 @@ def main() -> int:
             MAX_LOOKAHEAD_HOURS,
             now_utc=scan_time,
             betking_matches=betking_matches,
+            msport_matches=msport_matches,
             max_arbitrage_profit_pct=MAX_ARBITRAGE_PROFIT_PCT,
             min_minutes_to_kickoff=MIN_MINUTES_TO_KICKOFF,
         )
@@ -79,10 +83,12 @@ def main() -> int:
         return 0
 
     logger.info(
-        "Scan summary: betking_rows=%d betpawa_rows=%d matched_pairs=%d "
-        "arbs_found=%d",
+        "Scan summary: betking_rows=%d betpawa_rows=%d bet9ja_rows=%d "
+        "msport_rows=%d matched_pairs=%d arbs_found=%d",
         len(betking_matches),
         len(betpawa_matches),
+        len(bet9ja_matches),
+        len(msport_matches),
         matched_pairs,
         len(opportunities),
     )
@@ -110,6 +116,7 @@ def main() -> int:
                     betpawa_rows=len(betpawa_matches),
                     bet9ja_rows=len(bet9ja_matches),
                     matched_pairs=matched_pairs,
+                    msport_rows=len(msport_matches),
                 )
             )
             logger.info("Telegram empty-scan notification delivered")

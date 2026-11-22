@@ -261,11 +261,13 @@ def _feeds(
     betpawa_matches: list[dict[str, Any]],
     bet9ja_matches: list[dict[str, Any]],
     betking_matches: list[dict[str, Any]] | None,
+    msport_matches: list[dict[str, Any]] | None,
 ) -> tuple[tuple[str, list[dict[str, Any]]], ...]:
     return (
         ("Betpawa", betpawa_matches),
         ("Bet9ja", bet9ja_matches),
         ("BetKing", betking_matches or []),
+        ("MSport", msport_matches or []),
     )
 
 
@@ -274,6 +276,7 @@ def count_matched_pairs(
     bet9ja_matches: list[dict[str, Any]],
     *,
     betking_matches: list[dict[str, Any]] | None = None,
+    msport_matches: list[dict[str, Any]] | None = None,
     max_lookahead_hours: float = MAX_LOOKAHEAD_HOURS,
     min_minutes_to_kickoff: int = MIN_MINUTES_TO_KICKOFF,
     now_utc: datetime | None = None,
@@ -298,7 +301,12 @@ def count_matched_pairs(
             str(second["kickoff"]),
         )
         for first, second, _ in _matching_pairs(
-            _feeds(betpawa_matches, bet9ja_matches, betking_matches),
+            _feeds(
+                betpawa_matches,
+                bet9ja_matches,
+                betking_matches,
+                msport_matches,
+            ),
             scan_time,
             earliest_utc,
             cutoff_utc,
@@ -315,6 +323,7 @@ def find_arbitrage(
     *,
     now_utc: datetime | None = None,
     betking_matches: list[dict[str, Any]] | None = None,
+    msport_matches: list[dict[str, Any]] | None = None,
     max_arbitrage_profit_pct: float = MAX_ARBITRAGE_PROFIT_PCT,
     min_minutes_to_kickoff: int = MIN_MINUTES_TO_KICKOFF,
 ) -> list[dict[str, Any]]:
@@ -330,7 +339,7 @@ def find_arbitrage(
     than the UTC lookahead cutoff. Opportunities above the configured ROI cap
     are discarded. Draw No Bet opportunities break even if drawn because both
     stakes are refunded; their reported profit applies to decisive results.
-    When provided, BetKing matches are compared against both existing feeds.
+    BetKing and MSport matches are compared against every other supplied feed.
     """
     if bankroll <= 0:
         raise ValueError("bankroll must be greater than zero")
@@ -347,7 +356,12 @@ def find_arbitrage(
 
     opportunities: list[dict[str, Any]] = []
     for first, second, score in _matching_pairs(
-        _feeds(betpawa_matches, bet9ja_matches, betking_matches),
+        _feeds(
+            betpawa_matches,
+            bet9ja_matches,
+            betking_matches,
+            msport_matches,
+        ),
         scan_time,
         earliest_utc,
         cutoff_utc,

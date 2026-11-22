@@ -1,16 +1,17 @@
 # Sports Arbitrage Scanner
 
 A lightweight FastAPI scanner for pre-match two-way football, basketball, and
-tennis markets. It compares configured Betpawa Nigeria and Bet9ja Nigeria JSON
-feeds, and optionally BetKing Nigeria, matches events with RapidFuzz, calculates
-stakes from a ₦10,000 default bankroll, and sends new opportunities to Telegram.
+tennis markets. It compares Betpawa Nigeria, BetKing Nigeria, and MSport Nigeria
+feeds, plus optional Bet9ja Nigeria JSON, matches events with RapidFuzz,
+calculates stakes from a ₦10,000 default bankroll, and sends new opportunities
+to Telegram.
 No browser automation is used.
 
 ## Setup
 
 1. Use Python 3.10 or later and install dependencies with `pip install -r requirements.txt`.
 2. Copy `.env.example` to `.env`, then set the Telegram credentials and feed
-   URLs. BetKing is optional.
+   URLs. The built-in BetKing and MSport feeds can be overridden if needed.
 3. Start the server with `uvicorn main:app --host 0.0.0.0 --port 8000`.
 4. Configure an external uptime monitor to request `GET /health` every five
    minutes. The endpoint returns `{"status":"ok"}`.
@@ -48,10 +49,11 @@ be alerted again. The long-running FastAPI scanner only deduplicates in memory
 for the lifetime of its process. No cache is needed for the stateless batch
 workflow.
 
-Betpawa and BetKing use built-in public feed URLs by default, so their URLs do
-not need to be configured in GitHub Actions. To override them locally, set
-`BETPAWA_FEED_URL` or `BETKING_FEED_URL` to a valid HTTP, HTTPS, or local file
-URL. Blank or whitespace-only values use the defaults. Configure
+Betpawa, BetKing, and MSport use built-in public feed URLs by default, so their
+URLs do not need to be configured in GitHub Actions for standard scans. To
+override them locally, set `BETPAWA_FEED_URL`, `BETKING_FEED_URL`, or
+`MSPORT_FEED_URL` to a valid HTTP, HTTPS, or local file URL. Blank or
+whitespace-only values use the defaults. Configure
 `BET9JA_FEED_URL`, `TELEGRAM_BOT_TOKEN`, and `TELEGRAM_CHAT_ID` as repository
 Actions secrets (the chat ID can also be a repository variable). When
 `BET9JA_FEED_URL` is unset, the batch scan logs a skip and proceeds with an
@@ -104,6 +106,13 @@ basketball Moneyline and full-match Over/Under Points; and tennis Match Winner.
 Set `BETPAWA_FEED_URL` only to override the endpoint. The adapter sends the
 `X-Pawa-Brand` header and maps the native event response. Normalized and
 `file://` inputs remain supported.
+MSport defaults to its Nigerian `all-matches/next-7-days` API and requests
+soccer, basketball, and tennis by their public sport IDs. It maps football
+Over/Under 1.5/2.5/3.5, Both Teams to Score, and Draw No Bet; basketball
+full-match Winner (including overtime) and total points (including overtime);
+and tennis match Winner. Live events, unavailable fixtures, and inactive
+selections are excluded. The public list API currently returns up to 50 events
+per sport request; normalized and local `file://` inputs are also supported.
 Bet9ja retains normalized-list support and accepts an optional provider parser
 through `parse_payload(payload, native_parser=...)`; unknown native payloads
 fail explicitly instead of being guessed.

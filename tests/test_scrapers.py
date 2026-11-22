@@ -17,6 +17,10 @@ from scrapers.betpawa import (
     fetch_matches as fetch_betpawa_matches,
     parse_payload as parse_betpawa_payload,
 )
+from scrapers.msport import (
+    fetch_matches as fetch_msport_matches,
+    parse_payload as parse_msport_payload,
+)
 
 
 class ScraperAdapterTests(unittest.TestCase):
@@ -946,6 +950,178 @@ class ScraperAdapterTests(unittest.TestCase):
             "https://sportsapicdn-desktop.betking.com/api/feeds/prematch/"
             "GetEvents/en/{date}/0/0/1",
         )
+
+    def test_msport_maps_live_schema_for_supported_sports_and_markets(self) -> None:
+        def market(
+            market_id: int,
+            name: str,
+            specifiers: str,
+            outcome_a: tuple[str, str, int],
+            outcome_b: tuple[str, str, int],
+        ) -> dict[str, Any]:
+            return {
+                "id": market_id,
+                "name": name,
+                "specifiers": specifiers,
+                "outcomes": [
+                    {
+                        "description": outcome_a[0],
+                        "odds": outcome_a[1],
+                        "isActive": outcome_a[2],
+                    },
+                    {
+                        "description": outcome_b[0],
+                        "odds": outcome_b[1],
+                        "isActive": outcome_b[2],
+                    },
+                ],
+            }
+
+        def event(
+            event_id: str,
+            sport_id: str,
+            home: str,
+            away: str,
+            markets: list[dict[str, Any]],
+            *,
+            status: int = 0,
+            booking_status: str = "Booked",
+        ) -> dict[str, Any]:
+            return {
+                "eventId": event_id,
+                "sportId": sport_id,
+                "status": status,
+                "bookingStatus": booking_status,
+                "homeTeam": home,
+                "awayTeam": away,
+                "startTime": 1_796_140_800_000,
+                "tournament": "Test League",
+                "markets": markets,
+            }
+
+        payload = {
+            "bizCode": 10000,
+            "data": {
+                "events": [
+                    event(
+                        "football-1",
+                        "sr:sport:1",
+                        "Lagos United",
+                        "Abuja FC",
+                        [
+                            market(18, "Over/Under", "total=1.5", ("Over 1.5", "1.40", 1), ("Under 1.5", "2.80", 1)),
+                            market(18, "Over/Under", "total=2.5", ("Over 2.5", "2.00", 1), ("Under 2.5", "1.90", 1)),
+                            market(18, "Over/Under", "total=3.5", ("Over 3.5", "2.50", 1), ("Under 3.5", "1.50", 1)),
+                            market(29, "GG/NG", "", ("Yes", "1.80", 1), ("No", "2.10", 1)),
+                            market(11, "Draw No Bet", "", ("Home", "1.70", 1), ("Away", "2.20", 1)),
+                            market(18, "Over/Under", "total=2.5", ("Over 2.5", "2.00", 0), ("Under 2.5", "1.90", 1)),
+                            market(1, "1x2", "", ("Home", "2.00", 1), ("Draw", "3.00", 1)),
+                        ],
+                    ),
+                    event(
+                        "basketball-1",
+                        "sr:sport:2",
+                        "Home Hoops",
+                        "Away Hoops",
+                        [
+                            market(219, "Winner (incl. OT)", "", ("Home", "1.80", 1), ("Away", "2.10", 1)),
+                            market(225, "O/U (incl. OT)", "total=161.5", ("Over 161.5", "1.90", 1), ("Under 161.5", "1.90", 1)),
+                            market(227, "Home O/U (incl. OT)", "total=80.5", ("Over 80.5", "1.90", 1), ("Under 80.5", "1.90", 1)),
+                        ],
+                    ),
+                    event(
+                        "tennis-1",
+                        "sr:sport:5",
+                        "Player One",
+                        "Player Two",
+                        [
+                            market(186, "Winner", "", ("Home", "1.70", 1), ("Away", "2.20", 1)),
+                            market(202, "Set Winner", "setnr=1", ("Home", "1.70", 1), ("Away", "2.20", 1)),
+                        ],
+                    ),
+                    event(
+                        "live-1",
+                        "sr:sport:1",
+                        "Live Home",
+                        "Live Away",
+                        [market(18, "Over/Under", "total=2.5", ("Over 2.5", "2.00", 1), ("Under 2.5", "1.90", 1))],
+                        status=1,
+                    ),
+                    event(
+                        "unavailable-1",
+                        "sr:sport:1",
+                        "Unavailable Home",
+                        "Unavailable Away",
+                        [market(29, "GG/NG", "", ("Yes", "1.80", 1), ("No", "2.10", 1))],
+                        booking_status="Unavailable",
+                    ),
+                ]
+            },
+        }
+
+        parsed = parse_msport_payload(payload)
+
+        self.assertEqual(
+            [(row["sport"], row["market"]) for row in parsed],
+            [
+                ("Football", "Over/Under 1.5 Goals"),
+                ("Football", "Over/Under 2.5 Goals"),
+                ("Football", "Over/Under 3.5 Goals"),
+                ("Football", "Both Teams to Score"),
+                ("Football", "Draw No Bet"),
+                ("Basketball", "Match Winner"),
+                ("Basketball", "Over/Under 161.5 Points"),
+                ("Tennis", "Match Winner"),
+            ],
+        )
+        self.assertEqual(parsed[0]["bookie"], "MSport")
+        self.assertEqual(
+            (parsed[0]["outcome_a"], parsed[0]["outcome_b"]),
+            (1.4, 2.8),
+        )
+        self.assertEqual(parsed[3]["league"], "Test League")
+        self.assertEqual(parsed[5]["home"], "Home Hoops")
+        self.assertEqual(parsed[7]["away"], "Player Two")
+
+    def test_msport_fetches_each_supported_sport_and_passes_operator_header(self) -> None:
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = {"bizCode": 10000, "data": {"events": []}}
+        feed_url = (
+            "https://www.msport.com/api/ng/facts-center/query/frontend/"
+            "all-matches/next-7-days"
+        )
+        with (
+            patch("scrapers.msport.MSPORT_FEED_URL", feed_url),
+            patch(
+                "scrapers.msport.curl_requests.get",
+                return_value=response,
+            ) as mocked_get,
+        ):
+            matches = fetch_msport_matches()
+
+        self.assertEqual(matches, [])
+        self.assertEqual(mocked_get.call_count, 3)
+        self.assertEqual(
+            [call.kwargs["params"]["sportId"] for call in mocked_get.call_args_list],
+            ["sr:sport:1", "sr:sport:2", "sr:sport:5"],
+        )
+        for call in mocked_get.call_args_list:
+            self.assertEqual(call.kwargs["headers"]["OperId"], "2")
+            self.assertEqual(call.kwargs["headers"]["Accept"], "application/json")
+
+    def test_msport_loads_normalized_records_from_file_url(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "events.json"
+            path.write_text(
+                json.dumps({"matches": [self.normalized_match]}),
+                encoding="utf-8",
+            )
+            with patch("scrapers.msport.MSPORT_FEED_URL", path.as_uri()):
+                matches = fetch_msport_matches()
+
+        self.assertEqual(matches[0]["bookie"], "MSport")
+        self.assertEqual(matches[0]["home"], "Lagos United")
 
 
 if __name__ == "__main__":
