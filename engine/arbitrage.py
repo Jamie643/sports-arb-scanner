@@ -1,4 +1,5 @@
 import math
+import re
 from collections.abc import Iterator
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -67,6 +68,11 @@ def _scan_window(
 
 
 def _event_match_score(first: dict[str, Any], second: dict[str, Any]) -> int | None:
+    first_sport = str(first.get("sport") or "Football").strip().casefold()
+    second_sport = str(second.get("sport") or "Football").strip().casefold()
+    if first_sport != second_sport:
+        return None
+
     home_score = fuzz.token_set_ratio(str(first["home"]), str(second["home"]))
     away_score = fuzz.token_set_ratio(str(first["away"]), str(second["away"]))
     if min(home_score, away_score) < MIN_MATCH_SCORE:
@@ -95,7 +101,24 @@ def _event_match_score(first: dict[str, Any], second: dict[str, Any]) -> int | N
     return int(min(home_score, away_score))
 
 
-def _market_outcomes(market: str) -> tuple[str, str] | None:
+def _market_outcomes(
+    market: str,
+    sport: str = "Football",
+) -> tuple[str, str] | None:
+    normalized_sport = sport.strip().casefold()
+    if market == "Match Winner" and normalized_sport == "basketball":
+        return "Home", "Away"
+    if market == "Match Winner" and normalized_sport == "tennis":
+        return "Player 1", "Player 2"
+    points_market = re.fullmatch(
+        r"Over/Under (\d+(?:\.\d+)?) Points",
+        market,
+    )
+    if points_market and normalized_sport == "basketball":
+        line = points_market.group(1)
+        return f"Over {line}", f"Under {line}"
+    if normalized_sport != "football":
+        return None
     return {
         "Over/Under 1.5 Goals": ("Over 1.5", "Under 1.5"),
         "Over/Under 2.5 Goals": ("Over 2.5", "Under 2.5"),
@@ -165,6 +188,7 @@ def _build_opportunity(
     opportunity = {
         "home": first["home"],
         "away": first["away"],
+        "sport": str(first.get("sport") or "Football"),
         "kickoff": first["kickoff"],
         "market": market,
         "match_score": score,
@@ -209,13 +233,17 @@ def _matching_pairs(
                 ):
                     continue
                 first_market = str(first.get("market", ""))
-                if _market_outcomes(first_market) is None:
+                first_sport = str(first.get("sport") or "Football").strip()
+                if _market_outcomes(first_market, first_sport) is None:
                     continue
                 for second in second_feed:
                     if (
                         str(second.get("bookie", "")).casefold()
                         != second_bookie.casefold()
                     ):
+                        continue
+                    second_sport = str(second.get("sport") or "Football").strip()
+                    if first_sport.casefold() != second_sport.casefold():
                         continue
                     if not _is_pre_match(
                         second.get("kickoff"), scan_time, earliest_utc, cutoff_utc
@@ -259,10 +287,12 @@ def count_matched_pairs(
     fixture_pairs = {
         (
             str(first["bookie"]).casefold(),
+            str(first.get("sport") or "Football").casefold(),
             str(first["home"]).casefold(),
             str(first["away"]).casefold(),
             str(first["kickoff"]),
             str(second["bookie"]).casefold(),
+            str(second.get("sport") or "Football").casefold(),
             str(second["home"]).casefold(),
             str(second["away"]).casefold(),
             str(second["kickoff"]),
@@ -290,8 +320,10 @@ def find_arbitrage(
 ) -> list[dict[str, Any]]:
     """Find cross-bookmaker two-way arbitrage with rounded Naira stakes.
 
-    Each feed must use canonical market names and put Over/Home/Yes in
-    outcome_a and Under/Away/No in outcome_b.
+    Each feed must use canonical market names and keep the first canonical
+    selection in outcome_a and its complement in outcome_b. This means
+    Over/Home/Yes for football, Home/Over for basketball, and Player 1 for
+    tennis.
     Odds must remain available at placement time; the probability threshold
     provides an edge buffer but cannot protect against a changed price. Events
     must start at least the configured minimum minutes from now and no later
@@ -320,7 +352,10 @@ def find_arbitrage(
         earliest_utc,
         cutoff_utc,
     ):
-        market_outcomes = _market_outcomes(str(first["market"]))
+        market_outcomes = _market_outcomes(
+            str(first["market"]),
+            str(first.get("sport") or "Football"),
+        )
         assert market_outcomes is not None
         outcome_a, outcome_b = market_outcomes
         for candidate in (

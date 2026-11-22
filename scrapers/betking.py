@@ -15,6 +15,7 @@ from settings import BETKING_FEED_URL, DEFAULT_BETKING_FEED_URL
 
 
 _BETKING_HOME_URL = "https://www.betking.com/"
+_BETKING_SPORT_IDS = (1, 2, 5)
 
 
 def _utc_dates() -> tuple[str, str]:
@@ -53,12 +54,30 @@ def _date_wide_urls(feed_url: str) -> list[str] | None:
     return None
 
 
+def _sport_urls(feed_url: str) -> list[str]:
+    match = re.search(
+        r"(?P<prefix>/GetEvents/[^/]+/\d{4}-\d{2}-\d{2}/[^/]+/[^/]+/)"
+        r"(?P<sport>\d+)(?P<suffix>(?:\?.*)?$)",
+        feed_url,
+        re.IGNORECASE,
+    )
+    if match is None:
+        return [feed_url]
+    return [
+        feed_url[: match.start("sport")]
+        + str(sport_id)
+        + feed_url[match.end("sport") :]
+        for sport_id in _BETKING_SPORT_IDS
+    ]
+
+
 def _deduplicate_matches(
     matches: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    deduplicated: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    deduplicated: dict[tuple[str, str, str, str, str], dict[str, Any]] = {}
     for match in matches:
         key = (
+            str(match["sport"]).strip().casefold(),
             str(match["home"]).strip().casefold(),
             str(match["away"]).strip().casefold(),
             str(match["kickoff"]).strip(),
@@ -66,6 +85,15 @@ def _deduplicate_matches(
         )
         deduplicated.setdefault(key, match)
     return list(deduplicated.values())
+
+
+def _sport_name(area: dict[str, Any]) -> str | None:
+    value = str(area.get("SportName") or "Football").strip().casefold()
+    return {
+        "football": "Football",
+        "basketball": "Basketball",
+        "tennis": "Tennis",
+    }.get(value)
 
 
 def _teams(item: dict[str, Any]) -> tuple[str, str] | None:
@@ -128,10 +156,74 @@ def _league_name(item: dict[str, Any], area: dict[str, Any]) -> str:
     return ""
 
 
-def _market_kind(collection: dict[str, Any]) -> str | None:
+def _market_kind(collection: dict[str, Any], sport: str) -> str | None:
     odds_type = collection.get("OddsType")
     name = odds_type.get("OddsTypeName", "") if isinstance(odds_type, dict) else ""
+    odds_type_id = (
+        str(odds_type.get("OddsTypeID", ""))
+        if isinstance(odds_type, dict)
+        else ""
+    )
     normalized_name = " ".join(str(name).casefold().split())
+
+    if sport == "Basketball":
+        if odds_type_id == "9300" or normalized_name in {
+            "moneyline",
+            "match winner",
+        }:
+            return "Match Winner"
+        if not any(
+            phrase in normalized_name
+            for phrase in ("total points", "points over/under", "total score")
+        ):
+            return None
+        if any(
+            term in normalized_name
+            for term in ("half", "quarter", "1q", "2q", "3q", "4q", "team")
+        ):
+            return None
+        line_values: list[Any] = [
+            collection.get("SpecialBetValue"),
+            collection.get("SpecialValueDisplay"),
+        ]
+        line_in_name = re.search(
+            r"(?<!\d)\d+(?:[.,]\d+)?(?!\d)",
+            normalized_name,
+        )
+        if line_in_name:
+            line_values.insert(0, line_in_name.group())
+        match_odds = collection.get("MatchOdds", [])
+        if isinstance(match_odds, list):
+            for odd in match_odds:
+                if isinstance(odd, dict):
+                    attribute = odd.get("OddAttribute")
+                    if isinstance(attribute, dict):
+                        line_values.extend(
+                            (
+                                attribute.get("SpecialValue"),
+                                attribute.get("SpecialValueString"),
+                            )
+                        )
+        for value in line_values:
+            try:
+                line = float(str(value).replace(",", "."))
+            except (TypeError, ValueError):
+                continue
+            if math.isfinite(line) and line > 0:
+                return f"Over/Under {line:g} Points"
+        return None
+
+    if sport == "Tennis":
+        if odds_type_id == "9388" or normalized_name in {
+            "1-2",
+            "moneyline",
+            "match winner",
+        }:
+            return "Match Winner"
+        return None
+
+    if sport != "Football":
+        return None
 
     if "draw no bet" in normalized_name or re.search(r"\bdnb\b", normalized_name):
         if not any(period in normalized_name for period in ("half", "early")):
@@ -207,6 +299,22 @@ def _selections(collection: dict[str, Any]) -> dict[str, float]:
     return selections
 
 
+def _two_way_selections(
+    selections: dict[str, float],
+) -> tuple[float | None, float | None]:
+    if len(selections) != 2 or {"x", "draw", "tie"}.intersection(selections):
+        return None, None
+    outcome_a = selections.get(
+        "1",
+        selections.get("home", selections.get("player 1")),
+    )
+    outcome_b = selections.get(
+        "2",
+        selections.get("away", selections.get("player 2")),
+    )
+    return outcome_a, outcome_b
+
+
 def _parse_betking_payload(payload: Any) -> list[dict[str, Any]]:
     if not isinstance(payload, dict) or not isinstance(
         payload.get("AreaMatches"), list
@@ -216,6 +324,9 @@ def _parse_betking_payload(payload: Any) -> list[dict[str, Any]]:
     matches: list[dict[str, Any]] = []
     for area in payload["AreaMatches"]:
         if not isinstance(area, dict):
+            continue
+        sport = _sport_name(area)
+        if sport is None:
             continue
         items = area.get("Items", [])
         if not isinstance(items, list):
@@ -234,13 +345,19 @@ def _parse_betking_payload(payload: Any) -> list[dict[str, Any]]:
             for collection in collections:
                 if not isinstance(collection, dict):
                     continue
-                kind = _market_kind(collection)
+                kind = _market_kind(collection, sport)
                 selections = _selections(collection)
-                if kind in {
+                if kind == "Match Winner":
+                    outcome_a, outcome_b = _two_way_selections(selections)
+                    market = kind
+                elif kind in {
                     "Over/Under 1.5 Goals",
                     "Over/Under 2.5 Goals",
                     "Over/Under 3.5 Goals",
-                }:
+                } or (
+                    kind is not None
+                    and re.fullmatch(r"Over/Under \d+(?:\.\d+)? Points", kind)
+                ):
                     outcome_a, outcome_b = selections.get("over"), selections.get(
                         "under"
                     )
@@ -266,6 +383,7 @@ def _parse_betking_payload(payload: Any) -> list[dict[str, Any]]:
 
                 matches.append(
                     {
+                        "sport": sport,
                         "home": teams[0],
                         "away": teams[1],
                         "kickoff": kickoff,
@@ -306,13 +424,14 @@ def fetch_matches() -> list[dict[str, Any]]:
     if date_urls is not None:
         matches: list[dict[str, Any]] = []
         for date_url in date_urls:
-            response = curl_requests.get(
-                date_url,
-                headers={"Accept": "application/json"},
-                timeout=15,
-            )
-            response.raise_for_status()
-            matches.extend(parse_payload(response.json()))
+            for sport_url in _sport_urls(date_url):
+                response = curl_requests.get(
+                    sport_url,
+                    headers={"Accept": "application/json"},
+                    timeout=15,
+                )
+                response.raise_for_status()
+                matches.extend(parse_payload(response.json()))
         return _deduplicate_matches(matches)
 
     return fetch_json_feed(feed_url, "BetKing", parse_payload)

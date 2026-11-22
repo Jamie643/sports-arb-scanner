@@ -160,6 +160,120 @@ class ArbitrageTests(unittest.TestCase):
 
                 self.assertEqual(find_arbitrage(betpawa, bet9ja), [])
 
+    def test_arbitrages_basketball_and_tennis_winner_markets(self) -> None:
+        cases = (
+            ("Basketball", "Home Hoops", "Away Hoops", "Home", "Away"),
+            ("Tennis", "Player One", "Player Two", "Player 1", "Player 2"),
+        )
+        for sport, home, away, side_a, side_b in cases:
+            with self.subTest(sport=sport):
+                kickoff = _future_kickoff(6)
+                betpawa = [
+                    {
+                        "bookie": "Betpawa",
+                        "sport": sport,
+                        "home": home,
+                        "away": away,
+                        "kickoff": kickoff,
+                        "market": "Match Winner",
+                        "outcome_a": 2.2,
+                        "outcome_b": 1.6,
+                        "url": "https://example.test/a",
+                    }
+                ]
+                betking = [
+                    {
+                        **betpawa[0],
+                        "bookie": "BetKing",
+                        "outcome_a": 1.7,
+                        "outcome_b": 2.2,
+                    }
+                ]
+
+                opportunities = find_arbitrage(
+                    betpawa,
+                    [],
+                    betking_matches=betking,
+                )
+
+                self.assertEqual(len(opportunities), 1)
+                self.assertEqual(opportunities[0]["sport"], sport)
+                self.assertEqual(opportunities[0]["leg_a"]["outcome"], side_a)
+                self.assertEqual(opportunities[0]["leg_b"]["outcome"], side_b)
+
+    def test_basketball_points_totals_are_market_and_line_specific(self) -> None:
+        kickoff = _future_kickoff(6)
+        first = {
+            "bookie": "Betpawa",
+            "sport": "Basketball",
+            "home": "Home Hoops",
+            "away": "Away Hoops",
+            "kickoff": kickoff,
+            "market": "Over/Under 161.5 Points",
+            "outcome_a": 2.1,
+            "outcome_b": 1.8,
+            "url": "https://example.test/a",
+        }
+        second = {
+            **first,
+            "bookie": "BetKing",
+            "market": "Over/Under 162.5 Points",
+            "outcome_a": 1.9,
+            "outcome_b": 2.1,
+        }
+
+        self.assertEqual(find_arbitrage([first], [], betking_matches=[second]), [])
+
+        second["market"] = "Over/Under 161.5 Points"
+        opportunities = find_arbitrage([first], [], betking_matches=[second])
+
+        self.assertEqual(len(opportunities), 1)
+        self.assertEqual(opportunities[0]["leg_a"]["outcome"], "Over 161.5")
+        self.assertEqual(opportunities[0]["leg_b"]["outcome"], "Under 161.5")
+
+    def test_different_sports_never_cross_match_even_with_same_market(self) -> None:
+        kickoff = _future_kickoff(6)
+        basketball = {
+            **self.betpawa[0],
+            "sport": "Basketball",
+            "market": "Match Winner",
+        }
+        tennis = {
+            **self.bet9ja[0],
+            "sport": "Tennis",
+            "market": "Match Winner",
+        }
+        self.assertEqual(find_arbitrage([basketball], [tennis]), [])
+        self.assertEqual(count_matched_pairs([basketball], [tennis]), 0)
+
+        football = {**self.bet9ja[0], "sport": "Football", "kickoff": kickoff}
+        self.assertEqual(find_arbitrage([basketball], [football]), [])
+
+    def test_reversed_tennis_players_are_not_matched(self) -> None:
+        kickoff = _future_kickoff(6)
+        first = {
+            "bookie": "Betpawa",
+            "sport": "Tennis",
+            "home": "Player One",
+            "away": "Player Two",
+            "kickoff": kickoff,
+            "market": "Match Winner",
+            "outcome_a": 2.2,
+            "outcome_b": 1.6,
+            "url": "https://example.test/a",
+        }
+        second = {
+            **first,
+            "bookie": "BetKing",
+            "home": "Player Two",
+            "away": "Player One",
+            "outcome_a": 1.7,
+            "outcome_b": 2.2,
+        }
+
+        self.assertEqual(find_arbitrage([first], [], betking_matches=[second]), [])
+        self.assertEqual(count_matched_pairs([first], [], betking_matches=[second]), 0)
+
     def test_compares_betking_matches_when_provided(self) -> None:
         betking = [
             {
@@ -364,6 +478,7 @@ class ArbitrageTests(unittest.TestCase):
         opportunity = {
             "home": "Lagos United",
             "away": "Abuja FC",
+            "sport": "Football",
             "kickoff": "2026-12-01T16:00:00Z",
             "market": "Over/Under 2.5 Goals",
             "match_score": 96,
@@ -386,6 +501,7 @@ class ArbitrageTests(unittest.TestCase):
 
         message = format_alert(opportunity)
 
+        self.assertIn("Sport: Football", message)
         self.assertIn("Lagos United vs Abuja FC", message)
         self.assertIn("Betpawa — Over 2.5 @ 2.15", message)
         self.assertIn("Stake: ₦4,700", message)

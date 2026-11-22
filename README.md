@@ -1,9 +1,10 @@
 # Sports Arbitrage Scanner
 
-A lightweight FastAPI scanner for pre-match two-way football markets. It compares
-configured Betpawa Nigeria and Bet9ja Nigeria JSON feeds, and optionally BetKing
-Nigeria, matches events with RapidFuzz, calculates stakes from a ₦10,000 default
-bankroll, and sends new opportunities to Telegram. No browser automation is used.
+A lightweight FastAPI scanner for pre-match two-way football, basketball, and
+tennis markets. It compares configured Betpawa Nigeria and Bet9ja Nigeria JSON
+feeds, and optionally BetKing Nigeria, matches events with RapidFuzz, calculates
+stakes from a ₦10,000 default bankroll, and sends new opportunities to Telegram.
+No browser automation is used.
 
 ## Setup
 
@@ -62,12 +63,14 @@ default to `10000`, `24.0`, `15.0`, `15`, and `true`, respectively.
 ## Feed format
 
 Each URL should return either a list of records or an object containing a
-`matches` list. A record uses this schema:
+`matches` list. A record uses this schema (`sport` is optional and defaults to
+`Football`):
 
 ```json
 {
   "home": "Arsenal",
   "away": "Manchester City",
+  "sport": "Football",
   "kickoff": "2026-11-20T18:00:00Z",
   "market": "Over/Under 2.5 Goals",
   "outcome_a": 2.1,
@@ -77,23 +80,27 @@ Each URL should return either a list of records or an object containing a
 }
 ```
 
-`outcome_a` must consistently mean Over/Home/Yes and `outcome_b`
-Under/Away/No on both providers. Supported markets include Over/Under 1.5,
-2.5, and 3.5 Goals, Both Teams to Score, and Draw No Bet. `league` is optional
+For football, `outcome_a` means Over/Home/Yes and `outcome_b` means
+Under/Away/No. Basketball and tennis Match Winner markets use the first listed
+side as `outcome_a` and second listed side as `outcome_b`; basketball points
+totals use Over and Under. Supported markets include football Over/Under 1.5,
+2.5, and 3.5 Goals, Both Teams to Score, Draw No Bet, basketball Match Winner
+and full-match Over/Under Points, and tennis Match Winner. `league` is optional
 and defaults to an empty string. The adapter overwrites `bookie` with the
 configured provider name.
 
 The BetKing adapter maps the public `AreaMatches` / `Items` /
-`OddsCollection` structure, including full-match Total Goals 2.5 and `GG/NG`
-(Both Teams to Score), Total Goals 1.5/3.5, and Draw No Bet selections.
-Date-wide BetKing URLs fetch the current and
-next UTC date. It defaults to the public date-wide feed; set `BETKING_FEED_URL`
-only to override it. Local `file://` feeds and normalized records are supported
-as well. Its matches are compared against Betpawa and Bet9ja by both scanners.
+`OddsCollection` structure. Date-wide BetKing URLs fetch football, basketball,
+and tennis for the current and next UTC date. It maps football totals, BTTS,
+and Draw No Bet, plus basketball and tennis two-way winner markets and any
+full-match basketball points totals present in the feed. It defaults to the
+public date-wide feed; set `BETKING_FEED_URL` only to override it. Local
+`file://` feeds and normalized records are supported as well.
 
-Betpawa defaults to `/api/sportsbook/v4/events/lists/by-queries` and uses the
-built-in upcoming-football query for Over/Under 1.5/2.5/3.5, Both Teams to
-Score, and Draw No Bet.
+Betpawa defaults to `/api/sportsbook/v4/events/lists/by-queries` and uses
+built-in upcoming-football, basketball, and tennis queries. It requests
+football Over/Under 1.5/2.5/3.5, Both Teams to Score, and Draw No Bet;
+basketball Moneyline and full-match Over/Under Points; and tennis Match Winner.
 Set `BETPAWA_FEED_URL` only to override the endpoint. The adapter sends the
 `X-Pawa-Brand` header and maps the native event response. Normalized and
 `file://` inputs remain supported.

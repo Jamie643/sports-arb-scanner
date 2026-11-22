@@ -17,8 +17,11 @@ from settings import BETPAWA_FEED_URL, DEFAULT_BETPAWA_FEED_URL
 
 _BETPAWA_HOME_URL = "https://www.betpawa.ng/"
 _BETPAWA_LIVE_QUERY_PATH = "/api/sportsbook/v4/events/lists/by-queries"
-_BETPAWA_CATEGORY_ID = "2"
-_BETPAWA_MARKET_TYPES = ("5000", "3795", "4703")
+_BETPAWA_SPORT_MARKETS = (
+    ("2", ("5000", "3795", "4703")),
+    ("3", ("4791", "5009")),
+    ("452", ("2043818",)),
+)
 _BETPAWA_QUERY_TAKE = 40
 _BETPAWA_MAX_QUERY_PAGES = 5
 
@@ -109,7 +112,50 @@ def _league_name(event: dict[str, Any]) -> str:
     return ""
 
 
-def _market_kind(market: dict[str, Any], row: dict[str, Any]) -> str | None:
+def _event_sport(event: dict[str, Any]) -> str | None:
+    category = event.get("category")
+    if not isinstance(category, dict):
+        return "Football"
+    category_id = str(category.get("id", ""))
+    category_name = str(category.get("name", "")).strip().casefold()
+    return {
+        "2": "Football",
+        "3": "Basketball",
+        "452": "Tennis",
+    }.get(
+        category_id,
+        {
+            "football": "Football",
+            "basketball": "Basketball",
+            "tennis": "Tennis",
+        }.get(category_name),
+    )
+
+
+def _total_line(market: dict[str, Any], row: dict[str, Any]) -> str | None:
+    values: list[Any] = []
+    for source in (row, market):
+        for key in ("specifier", "handicap"):
+            value = source.get(key)
+            if isinstance(value, dict):
+                values.extend(value.get(name) for name in ("total", "points"))
+            elif value is not None:
+                values.append(value)
+    for value in values:
+        try:
+            line = float(str(value).replace(",", "."))
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(line) and line > 0:
+            return f"{line:g}"
+    return None
+
+
+def _market_kind(
+    market: dict[str, Any],
+    row: dict[str, Any],
+    sport: str,
+) -> str | None:
     market_type = market.get("marketType")
     market_type = market_type if isinstance(market_type, dict) else {}
     market_type_id = str(market_type.get("id", ""))
@@ -133,6 +179,50 @@ def _market_kind(market: dict[str, Any], row: dict[str, Any]) -> str | None:
         )
         if value is not None
     ).casefold()
+
+    if sport == "Basketball":
+        if (
+            market_type_id == "4791" or "moneyline" in descriptors
+        ) and not re.search(
+            r"\b(?:1h|2h|[1-4]q|[1-4](?:st|nd|rd|th)\s+quarter)\b",
+            descriptors,
+        ):
+            return "Match Winner"
+        is_full_match_total = (
+            market_type_id == "5009"
+            or "total score over/under" in descriptors
+            or "total points" in descriptors
+        )
+        if (
+            is_full_match_total
+            and not any(
+                term in descriptors
+                for term in (
+                    "1h",
+                    "2h",
+                    "1q",
+                    "2q",
+                    "3q",
+                    "4q",
+                    "quarter",
+                    "1st half",
+                    "2nd half",
+                )
+            )
+        ):
+            line = _total_line(market, row)
+            if line is not None:
+                return f"Over/Under {line} Points"
+        return None
+
+    if sport == "Tennis":
+        if market_type_id == "2043818" or "moneyline" in descriptors:
+            if not re.search(r"\b(?:[1-5]s|set)\b", descriptors):
+                return "Match Winner"
+        return None
+
+    if sport != "Football":
+        return None
 
     if (
         market_type_id == "4703"
@@ -183,6 +273,22 @@ def _row_prices(row: dict[str, Any]) -> dict[str, float]:
     return selections
 
 
+def _two_way_prices(
+    selections: dict[str, float],
+) -> tuple[float | None, float | None]:
+    if len(selections) != 2 or {"x", "draw", "tie"}.intersection(selections):
+        return None, None
+    outcome_a = selections.get(
+        "1",
+        selections.get("home", selections.get("player 1")),
+    )
+    outcome_b = selections.get(
+        "2",
+        selections.get("away", selections.get("player 2")),
+    )
+    return outcome_a, outcome_b
+
+
 def _parse_native_payload(payload: Any) -> list[dict[str, Any]] | None:
     events = _native_events(payload)
     if events is None:
@@ -190,6 +296,9 @@ def _parse_native_payload(payload: Any) -> list[dict[str, Any]] | None:
 
     matches: list[dict[str, Any]] = []
     for event in events:
+        sport = _event_sport(event)
+        if sport is None:
+            continue
         teams = _event_teams(event)
         kickoff = event.get("startTime")
         if teams is None or not isinstance(kickoff, str) or not kickoff:
@@ -206,13 +315,19 @@ def _parse_native_payload(payload: Any) -> list[dict[str, Any]] | None:
             for row in rows:
                 if not isinstance(row, dict):
                     continue
-                kind = _market_kind(market, row)
+                kind = _market_kind(market, row, sport)
                 selections = _row_prices(row)
-                if kind in {
+                if kind == "Match Winner":
+                    outcome_a, outcome_b = _two_way_prices(selections)
+                    market_name = kind
+                elif kind in {
                     "Over/Under 1.5 Goals",
                     "Over/Under 2.5 Goals",
                     "Over/Under 3.5 Goals",
-                }:
+                } or (
+                    kind is not None
+                    and re.fullmatch(r"Over/Under \d+(?:\.\d+)? Points", kind)
+                ):
                     outcome_a, outcome_b = selections.get("over"), selections.get(
                         "under"
                     )
@@ -231,6 +346,7 @@ def _parse_native_payload(payload: Any) -> list[dict[str, Any]] | None:
                     continue
                 matches.append(
                     {
+                        "sport": sport,
                         "home": teams[0],
                         "away": teams[1],
                         "kickoff": kickoff,
@@ -249,33 +365,40 @@ def _parse_native_payload(payload: Any) -> list[dict[str, Any]] | None:
 
 
 def _live_query(skip: int) -> dict[str, Any]:
-    market_types = list(_BETPAWA_MARKET_TYPES)
     return {
         "queries": [
             {
                 "query": {
                     "eventType": "UPCOMING",
-                    "categories": [_BETPAWA_CATEGORY_ID],
+                    "categories": [category_id],
                     "hasOdds": True,
-                    "marketTypes": market_types,
+                    "marketTypes": list(market_types),
                 },
-                "view": {"marketTypes": market_types},
+                "view": {"marketTypes": list(market_types)},
                 "skip": skip,
                 "take": _BETPAWA_QUERY_TAKE,
             }
+            for category_id, market_types in _BETPAWA_SPORT_MARKETS
         ]
     }
 
 
 def _event_identity(event: dict[str, Any]) -> tuple[str, ...]:
+    category = event.get("category")
+    category_id = (
+        str(category.get("id", ""))
+        if isinstance(category, dict)
+        else ""
+    )
     event_id = event.get("id")
     if event_id is not None:
-        return "id", str(event_id)
+        return "id", category_id, str(event_id)
     teams = _event_teams(event)
     kickoff = event.get("startTime")
     if teams is not None and isinstance(kickoff, str):
         return (
             "match",
+            category_id,
             teams[0].strip().casefold(),
             teams[1].strip().casefold(),
             kickoff.strip(),
@@ -326,9 +449,10 @@ def parse_payload(
 ) -> list[dict[str, Any]]:
     """Adapt Betpawa JSON to the scanner schema.
 
-    Native event responses are mapped for full-time Over/Under 1.5, 2.5, and
-    3.5, BTTS, and Draw No Bet. The normalized-list format remains supported.
-    ``native_parser`` can still be supplied for other Betpawa payload variants.
+    Native football events map supported full-time totals, BTTS, and Draw No
+    Bet. Basketball maps full-time Moneyline and Points totals, and tennis maps
+    full-time Moneyline. The normalized-list format remains supported;
+    ``native_parser`` handles other Betpawa payload variants.
     """
     if is_normalized_payload(payload):
         return normalize_matches(payload, "Betpawa")

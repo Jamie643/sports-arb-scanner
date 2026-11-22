@@ -71,6 +71,9 @@ def normalize_matches(payload: Any, bookie: str) -> list[dict[str, Any]]:
         matches.append(
             {
                 "bookie": bookie,
+                "sport": (
+                    str(item.get("sport") or "Football").strip() or "Football"
+                ),
                 "home": str(item["home"]),
                 "away": str(item["away"]),
                 "kickoff": str(item["kickoff"]),

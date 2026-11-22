@@ -40,6 +40,7 @@ class ScraperAdapterTests(unittest.TestCase):
             [
                 {
                     "bookie": "Betpawa",
+                    "sport": "Football",
                     "home": "Lagos United",
                     "away": "Abuja FC",
                     "kickoff": "2026-12-01T16:00:00Z",
@@ -211,6 +212,137 @@ class ScraperAdapterTests(unittest.TestCase):
         self.assertEqual(parsed[4]["market"], "Draw No Bet")
         self.assertEqual((parsed[4]["outcome_a"], parsed[4]["outcome_b"]), (1.7, 2.2))
 
+    def test_betpawa_parses_basketball_and_tennis_markets(self) -> None:
+        payload = {
+            "responses": [
+                {
+                    "responses": [
+                        {
+                            "category": {"id": "3", "name": "Basketball"},
+                            "name": "Home Hoops - Away Hoops",
+                            "participants": [
+                                {"name": "Home Hoops", "position": 1},
+                                {"name": "Away Hoops", "position": 2},
+                            ],
+                            "startTime": "2026-12-01T16:00:00Z",
+                            "markets": [
+                                {
+                                    "marketType": {
+                                        "id": "4791",
+                                        "name": "Moneyline - FT incl OT",
+                                    },
+                                    "row": [
+                                        {
+                                            "prices": [
+                                                {"name": "1", "odds": 1.8},
+                                                {"name": "2", "odds": 2.1},
+                                            ]
+                                        }
+                                    ],
+                                },
+                                {
+                                    "marketType": {
+                                        "id": "5009",
+                                        "name": "Total Score Over/Under - FT incl OT",
+                                    },
+                                    "row": [
+                                        {
+                                            "specifier": {"total": "161.5"},
+                                            "prices": [
+                                                {"name": "Over", "odds": 1.9},
+                                                {"name": "Under", "odds": 1.9},
+                                            ],
+                                        }
+                                    ],
+                                },
+                                {
+                                    "marketType": {
+                                        "id": "4973",
+                                        "name": "Total Score Over/Under - 1Q",
+                                    },
+                                    "row": [
+                                        {
+                                            "specifier": {"total": "35.5"},
+                                            "prices": [
+                                                {"name": "Over", "odds": 1.9},
+                                                {"name": "Under", "odds": 1.9},
+                                            ],
+                                        }
+                                    ],
+                                },
+                            ],
+                        },
+                        {
+                            "category": {"id": "452", "name": "Tennis"},
+                            "name": "Player One - Player Two",
+                            "participants": [
+                                {"name": "Player One", "position": 1},
+                                {"name": "Player Two", "position": 2},
+                            ],
+                            "startTime": "2026-12-01T17:00:00Z",
+                            "markets": [
+                                {
+                                    "marketType": {
+                                        "id": "2043818",
+                                        "name": "Moneyline - FT",
+                                    },
+                                    "row": [
+                                        {
+                                            "prices": [
+                                                {"name": "1", "odds": 1.7},
+                                                {"name": "2", "odds": 2.2},
+                                            ]
+                                        }
+                                    ],
+                                }
+                            ],
+                        },
+                        {
+                            "category": {"id": "101", "name": "eFootball"},
+                            "name": "Virtual One - Virtual Two",
+                            "participants": [
+                                {"name": "Virtual One", "position": 1},
+                                {"name": "Virtual Two", "position": 2},
+                            ],
+                            "startTime": "2026-12-01T18:00:00Z",
+                            "markets": [
+                                {
+                                    "marketType": {
+                                        "id": "3743",
+                                        "name": "1X2 - FT",
+                                    },
+                                    "row": [
+                                        {
+                                            "prices": [
+                                                {"name": "1", "odds": 2.0},
+                                                {"name": "X", "odds": 3.0},
+                                                {"name": "2", "odds": 4.0},
+                                            ]
+                                        }
+                                    ],
+                                }
+                            ],
+                        },
+                    ]
+                }
+            ]
+        }
+
+        parsed = parse_betpawa_payload(payload)
+
+        self.assertEqual(
+            [(row["sport"], row["market"]) for row in parsed],
+            [
+                ("Basketball", "Match Winner"),
+                ("Basketball", "Over/Under 161.5 Points"),
+                ("Tennis", "Match Winner"),
+            ],
+        )
+        self.assertEqual(
+            [(row["outcome_a"], row["outcome_b"]) for row in parsed],
+            [(1.8, 2.1), (1.9, 1.9), (1.7, 2.2)],
+        )
+
     def test_betpawa_maps_native_json_loaded_from_file_url(self) -> None:
         payload = {
             "responses": [
@@ -276,11 +408,20 @@ class ScraperAdapterTests(unittest.TestCase):
         self.assertEqual(args[0], feed_url)
         self.assertEqual(kwargs["headers"]["X-Pawa-Brand"], "betpawa-nigeria")
         query = json.loads(kwargs["params"]["q"])
-        request = query["queries"][0]
-        self.assertEqual(request["query"]["categories"], ["2"])
-        self.assertEqual(request["query"]["marketTypes"], ["5000", "3795", "4703"])
-        self.assertEqual(request["view"]["marketTypes"], ["5000", "3795", "4703"])
-        self.assertEqual(request["take"], 40)
+        requests = query["queries"]
+        self.assertEqual(
+            [request["query"]["categories"] for request in requests],
+            [["2"], ["3"], ["452"]],
+        )
+        self.assertEqual(
+            [request["query"]["marketTypes"] for request in requests],
+            [["5000", "3795", "4703"], ["4791", "5009"], ["2043818"]],
+        )
+        self.assertEqual(
+            [request["view"]["marketTypes"] for request in requests],
+            [["5000", "3795", "4703"], ["4791", "5009"], ["2043818"]],
+        )
+        self.assertEqual([request["take"] for request in requests], [40, 40, 40])
 
     def test_betpawa_blank_feed_url_uses_default_endpoint(self) -> None:
         with (
@@ -373,10 +514,13 @@ class ScraperAdapterTests(unittest.TestCase):
         )
         self.assertEqual(mocked_get.call_count, 3)
         skips = [
-            json.loads(call.kwargs["params"]["q"])["queries"][0]["skip"]
+            tuple(
+                request["skip"]
+                for request in json.loads(call.kwargs["params"]["q"])["queries"]
+            )
             for call in mocked_get.call_args_list
         ]
-        self.assertEqual(skips, [0, 2, 4])
+        self.assertEqual(skips, [(0, 0, 0), (2, 2, 2), (4, 4, 4)])
 
     def test_bet9ja_maps_native_json_loaded_from_file_url(self) -> None:
         native_payload = {"eventData": {"events": [{"event_id": "event-1"}]}}
@@ -514,6 +658,87 @@ class ScraperAdapterTests(unittest.TestCase):
         self.assertEqual(parsed[0]["league"], "Nigeria - Premier League")
         self.assertEqual(parsed[0]["url"], "https://www.betking.com/")
 
+    def test_betking_parses_basketball_tennis_and_points_totals(self) -> None:
+        def collection(name: str, selection_a: str, selection_b: str) -> dict[str, Any]:
+            return {
+                "OddsType": {
+                    "OddsTypeID": {"Moneyline": 9300, "1-2": 9388}.get(name),
+                    "OddsTypeName": name,
+                },
+                "SpecialBetValue": 161.5 if "Points" in name else 0,
+                "MatchOdds": [
+                    {
+                        "OddAttribute": {"OddName": selection_a},
+                        "Outcome": {"OddOutcome": 1.9},
+                    },
+                    {
+                        "OddAttribute": {"OddName": selection_b},
+                        "Outcome": {"OddOutcome": 2.0},
+                    },
+                ],
+            }
+
+        payload = {
+            "AreaMatches": [
+                {
+                    "SportName": "Basketball",
+                    "Items": [
+                        {
+                            "ItemName": "Home Hoops - Away Hoops",
+                            "ItemDate": "2026-12-01T16:00:00Z",
+                            "Teams": [
+                                {"Name": "Home Hoops", "ItemOrder": 1},
+                                {"Name": "Away Hoops", "ItemOrder": 2},
+                            ],
+                            "OddsCollection": [
+                                collection("Moneyline", "1", "2"),
+                                collection("Total Points Over/Under", "Over", "Under"),
+                            ],
+                        }
+                    ],
+                },
+                {
+                    "SportName": "Tennis",
+                    "Items": [
+                        {
+                            "ItemName": "Player One - Player Two",
+                            "ItemDate": "2026-12-01T17:00:00Z",
+                            "Teams": [
+                                {"Name": "Player One", "ItemOrder": 1},
+                                {"Name": "Player Two", "ItemOrder": 2},
+                            ],
+                            "OddsCollection": [collection("1-2", "1", "2")],
+                        }
+                    ],
+                },
+                {
+                    "SportName": "FootballGO",
+                    "Items": [
+                        {
+                            "ItemName": "Virtual One - Virtual Two",
+                            "ItemDate": "2026-12-01T18:00:00Z",
+                            "Teams": [
+                                {"Name": "Virtual One", "ItemOrder": 1},
+                                {"Name": "Virtual Two", "ItemOrder": 2},
+                            ],
+                            "OddsCollection": [collection("Moneyline", "1", "2")],
+                        }
+                    ],
+                },
+            ]
+        }
+
+        parsed = parse_betking_payload(payload)
+
+        self.assertEqual(
+            [(row["sport"], row["market"]) for row in parsed],
+            [
+                ("Basketball", "Match Winner"),
+                ("Basketball", "Over/Under 161.5 Points"),
+                ("Tennis", "Match Winner"),
+            ],
+        )
+
     def test_betking_maps_gg_ng_to_btts(self) -> None:
         payload = {
             "AreaMatches": [
@@ -642,12 +867,12 @@ class ScraperAdapterTests(unittest.TestCase):
                 }
             ]
         }
-        first_response = Mock()
-        first_response.raise_for_status.return_value = None
-        first_response.json.return_value = shared_match
-        second_response = Mock()
-        second_response.raise_for_status.return_value = None
-        second_response.json.return_value = shared_match
+        responses = []
+        for _ in range(6):
+            response = Mock()
+            response.raise_for_status.return_value = None
+            response.json.return_value = shared_match
+            responses.append(response)
 
         template = (
             "https://sportsapicdn-desktop.betking.com/api/feeds/"
@@ -661,7 +886,7 @@ class ScraperAdapterTests(unittest.TestCase):
             ),
             patch(
                 "scrapers.betking.curl_requests.get",
-                side_effect=[first_response, second_response],
+                side_effect=responses,
             ) as mocked_get,
         ):
             matches = fetch_betking_matches()
@@ -669,10 +894,16 @@ class ScraperAdapterTests(unittest.TestCase):
         self.assertEqual(len(matches), 1)
         self.assertEqual(matches[0]["home"], "Lagos United")
         self.assertEqual(matches[0]["away"], "Abuja FC")
-        self.assertEqual(mocked_get.call_count, 2)
+        self.assertEqual(mocked_get.call_count, 6)
         requested_urls = [call.args[0] for call in mocked_get.call_args_list]
-        self.assertIn("2026-12-01", requested_urls[0])
-        self.assertIn("2026-12-02", requested_urls[1])
+        self.assertEqual(
+            {url.rsplit("/", 1)[-1] for url in requested_urls},
+            {"1", "2", "5"},
+        )
+        self.assertEqual(
+            {url.split("/GetEvents/en/")[1].split("/")[0] for url in requested_urls},
+            {"2026-12-01", "2026-12-02"},
+        )
 
     def test_betking_single_date_url_expands_both_dates(self) -> None:
         feed_url = (
@@ -683,23 +914,23 @@ class ScraperAdapterTests(unittest.TestCase):
             "scrapers.betking._utc_dates",
             return_value=("2026-12-01", "2026-12-02"),
         ):
-            response_one = Mock()
-            response_one.raise_for_status.return_value = None
-            response_one.json.return_value = {"AreaMatches": []}
-            response_two = Mock()
-            response_two.raise_for_status.return_value = None
-            response_two.json.return_value = {"AreaMatches": []}
+            responses = []
+            for _ in range(6):
+                response = Mock()
+                response.raise_for_status.return_value = None
+                response.json.return_value = {"AreaMatches": []}
+                responses.append(response)
             with (
                 patch("scrapers.betking.BETKING_FEED_URL", feed_url),
                 patch(
                     "scrapers.betking.curl_requests.get",
-                    side_effect=[response_one, response_two],
+                    side_effect=responses,
                 ) as mocked_get,
             ):
                 matches = fetch_betking_matches()
 
         self.assertEqual(matches, [])
-        self.assertEqual(mocked_get.call_count, 2)
+        self.assertEqual(mocked_get.call_count, 6)
 
     def test_betking_blank_feed_url_uses_default_endpoint(self) -> None:
         with (

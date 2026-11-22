@@ -42,6 +42,7 @@ def format_alert(opportunity: dict[str, Any]) -> str:
         )
     return (
         "⚽ ARBITRAGE OPPORTUNITY\n\n"
+        f"Sport: {opportunity.get('sport', 'Football')}\n"
         f"Match: {opportunity['home']} vs {opportunity['away']}\n"
         f"Market: {opportunity['market']}\n"
         f"Team match: {opportunity['match_score']}% confidence\n\n"
