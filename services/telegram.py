@@ -65,6 +65,7 @@ def format_empty_scan_notification(
     bet9ja_rows: int,
     matched_pairs: int,
     msport_rows: int = 0,
+    polymarket_rows: int = 0,
 ) -> str:
     return (
         "📡 SCAN HEARTBEAT — NO ARBITRAGE FOUND\n\n"
@@ -75,6 +76,7 @@ def format_empty_scan_notification(
         f"Betpawa: {betpawa_rows}\n"
         f"Bet9ja: {bet9ja_rows}\n"
         f"MSport: {msport_rows}\n"
+        f"Polymarket: {polymarket_rows}\n"
         f"Matched fixture pairs: {matched_pairs}\n"
         "Arbitrage opportunities: 0"
     )

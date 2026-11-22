@@ -5,6 +5,11 @@ from run_once import main
 
 
 class RunOnceTests(unittest.TestCase):
+    def setUp(self) -> None:
+        patcher = patch("run_once.POLYMARKET_FEED_URL", "")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_skips_bet9ja_cleanly_when_feed_is_unset(self) -> None:
         with (
             patch("run_once.BET9JA_FEED_URL", ""),
@@ -106,11 +111,12 @@ class RunOnceTests(unittest.TestCase):
         self.assertIn(
             (
                 "Scan summary: betking_rows=%d betpawa_rows=%d bet9ja_rows=%d "
-                "msport_rows=%d matched_pairs=%d arbs_found=%d",
+                "msport_rows=%d polymarket_rows=%d matched_pairs=%d arbs_found=%d",
                 1,
                 0,
                 0,
                 1,
+                0,
                 2,
                 0,
             ),
@@ -158,6 +164,7 @@ class RunOnceTests(unittest.TestCase):
                     self.assertIn("Opportunities found: 0", message)
                     self.assertIn("Betpawa: 0", message)
                     self.assertIn("MSport: 0", message)
+                    self.assertIn("Polymarket: 0", message)
                     self.assertIn("Matched fixture pairs: 0", message)
 
     def test_logs_why_empty_scan_did_not_send_telegram(self) -> None:
@@ -230,6 +237,32 @@ class RunOnceTests(unittest.TestCase):
 
         self.assertEqual(result, 0)
         self.assertEqual(find_arbitrage.call_args.kwargs["msport_matches"], [])
+
+    def test_polymarket_fetch_failure_does_not_abort_scan(self) -> None:
+        with (
+            patch(
+                "run_once.POLYMARKET_FEED_URL",
+                "https://gamma-api.polymarket.com/events",
+            ),
+            patch("run_once.BET9JA_FEED_URL", ""),
+            patch("run_once.BETKING_FEED_URL", ""),
+            patch("run_once.fetch_betpawa_matches", return_value=[]),
+            patch("run_once.fetch_msport_matches", return_value=[]),
+            patch(
+                "run_once.fetch_polymarket_matches",
+                side_effect=RuntimeError("feed down"),
+            ),
+            patch("run_once.find_arbitrage", return_value=[]) as find_arbitrage,
+            patch("run_once.send_message"),
+            patch("run_once.logger.exception"),
+        ):
+            result = main()
+
+        self.assertEqual(result, 0)
+        self.assertEqual(
+            find_arbitrage.call_args.kwargs["polymarket_matches"],
+            [],
+        )
 
 
 if __name__ == "__main__":

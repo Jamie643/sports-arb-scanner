@@ -18,6 +18,7 @@ DEFAULT_MSPORT_FEED_URL = (
     "https://www.msport.com/api/ng/facts-center/query/frontend/"
     "all-matches/next-7-days"
 )
+DEFAULT_POLYMARKET_FEED_URL = "https://gamma-api.polymarket.com/events"
 
 
 def _read_feed_url(name: str, default: str) -> str:
@@ -138,4 +139,8 @@ BETKING_FEED_URL = _read_feed_url(
 MSPORT_FEED_URL = _read_feed_url(
     "MSPORT_FEED_URL",
     DEFAULT_MSPORT_FEED_URL,
+)
+POLYMARKET_FEED_URL = _read_feed_url(
+    "POLYMARKET_FEED_URL",
+    DEFAULT_POLYMARKET_FEED_URL,
 )

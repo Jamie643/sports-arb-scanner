@@ -10,8 +10,14 @@ from scrapers.bet9ja import fetch_matches as fetch_bet9ja_matches
 from scrapers.betking import fetch_matches as fetch_betking_matches
 from scrapers.betpawa import fetch_matches as fetch_betpawa_matches
 from scrapers.msport import fetch_matches as fetch_msport_matches
+from scrapers.polymarket import fetch_matches as fetch_polymarket_matches
 from services.telegram import send_alert
-from settings import BETKING_FEED_URL, DEFAULT_STAKE_NGN, MSPORT_FEED_URL
+from settings import (
+    BETKING_FEED_URL,
+    DEFAULT_STAKE_NGN,
+    MSPORT_FEED_URL,
+    POLYMARKET_FEED_URL,
+)
 
 
 logging.basicConfig(level=logging.INFO)
@@ -56,6 +62,10 @@ async def scan_once(
         fetches.append(_fetch_feed("MSport", fetch_msport_matches))
     else:
         logger.info("Skipping MSport: MSPORT_FEED_URL is unset")
+    if POLYMARKET_FEED_URL:
+        fetches.append(_fetch_feed("Polymarket", fetch_polymarket_matches))
+    else:
+        logger.info("Skipping Polymarket: POLYMARKET_FEED_URL is unset")
     results = await asyncio.gather(*fetches)
     feeds: dict[str, list[dict[str, Any]]] = {}
     all_feeds_succeeded = True
@@ -77,6 +87,7 @@ async def scan_once(
         DEFAULT_STAKE_NGN,
         betking_matches=feeds.get("BetKing", []),
         msport_matches=feeds.get("MSport", []),
+        polymarket_matches=feeds.get("Polymarket", []),
     )
     current_keys = {_opportunity_key(item) for item in opportunities}
 

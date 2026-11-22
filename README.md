@@ -1,10 +1,10 @@
 # Sports Arbitrage Scanner
 
 A lightweight FastAPI scanner for pre-match two-way football, basketball, and
-tennis markets. It compares Betpawa Nigeria, BetKing Nigeria, and MSport Nigeria
-feeds, plus optional Bet9ja Nigeria JSON, matches events with RapidFuzz,
-calculates stakes from a ₦10,000 default bankroll, and sends new opportunities
-to Telegram.
+tennis markets. It compares Betpawa Nigeria, BetKing Nigeria, MSport Nigeria,
+and Polymarket feeds, plus optional Bet9ja Nigeria JSON, matches events with
+RapidFuzz, calculates stakes from a ₦10,000 default bankroll, and sends new
+opportunities to Telegram.
 No browser automation is used.
 
 ## Setup
@@ -49,11 +49,12 @@ be alerted again. The long-running FastAPI scanner only deduplicates in memory
 for the lifetime of its process. No cache is needed for the stateless batch
 workflow.
 
-Betpawa, BetKing, and MSport use built-in public feed URLs by default, so their
-URLs do not need to be configured in GitHub Actions for standard scans. To
-override them locally, set `BETPAWA_FEED_URL`, `BETKING_FEED_URL`, or
-`MSPORT_FEED_URL` to a valid HTTP, HTTPS, or local file URL. Blank or
-whitespace-only values use the defaults. Configure
+Betpawa, BetKing, MSport, and Polymarket use built-in public feed URLs by
+default, so their URLs do not need to be configured in GitHub Actions for
+standard scans. To override them locally, set any of `BETPAWA_FEED_URL`,
+`BETKING_FEED_URL`, `MSPORT_FEED_URL`, or `POLYMARKET_FEED_URL` to a valid
+HTTP, HTTPS, or local file URL. Blank or whitespace-only values use the
+defaults. Configure
 `BET9JA_FEED_URL`, `TELEGRAM_BOT_TOKEN`, and `TELEGRAM_CHAT_ID` as repository
 Actions secrets (the chat ID can also be a repository variable). When
 `BET9JA_FEED_URL` is unset, the batch scan logs a skip and proceeds with an
@@ -113,6 +114,12 @@ full-match Winner (including overtime) and total points (including overtime);
 and tennis match Winner. Live events, unavailable fixtures, and inactive
 selections are excluded. The public list API is queried with a 2,000-event
 per-sport limit; normalized and local `file://` inputs are also supported.
+Polymarket uses Gamma's v2 upcoming-event listing and the CLOB order books.
+It maps Basketball and Tennis Match Winner markets plus clearly labeled
+full-match totals, and uses the best available BUY ask (not the displayed
+midpoint) to derive decimal odds. Events without an ask in the actionable
+price range are excluded. Local normalized rows are supported for offline
+tests; native event snapshots require CLOB order-book data to become actionable.
 Bet9ja retains normalized-list support and accepts an optional provider parser
 through `parse_payload(payload, native_parser=...)`; unknown native payloads
 fail explicitly instead of being guessed.

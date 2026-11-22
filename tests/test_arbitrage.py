@@ -14,6 +14,9 @@ def _future_kickoff(hours: int) -> str:
 
 class ArbitrageTests(unittest.TestCase):
     def setUp(self) -> None:
+        patcher = patch("main.POLYMARKET_FEED_URL", "")
+        patcher.start()
+        self.addCleanup(patcher.stop)
         self.betpawa = [
             {
                 "bookie": "Betpawa",
@@ -320,6 +323,66 @@ class ArbitrageTests(unittest.TestCase):
                 msport_matches=msport,
             ),
             1,
+        )
+
+    def test_compares_polymarket_matches_with_other_bookmakers(self) -> None:
+        polymarket = [
+            {
+                **self.betpawa[0],
+                "bookie": "Polymarket",
+                "outcome_a": 1.9,
+                "outcome_b": 2.1,
+            }
+        ]
+        betking = [{**self.betpawa[0], "bookie": "BetKing"}]
+        msport = [{**self.betpawa[0], "bookie": "MSport"}]
+
+        opportunities = find_arbitrage(
+            self.betpawa,
+            [],
+            betking_matches=betking,
+            msport_matches=msport,
+            polymarket_matches=polymarket,
+        )
+
+        self.assertEqual(len(opportunities), 3)
+        self.assertTrue(
+            all(
+                "Polymarket"
+                in {
+                    opportunity["leg_a"]["bookie"],
+                    opportunity["leg_b"]["bookie"],
+                }
+                for opportunity in opportunities
+            )
+        )
+        self.assertEqual(
+            {
+                tuple(
+                    sorted(
+                        (
+                            opportunity["leg_a"]["bookie"],
+                            opportunity["leg_b"]["bookie"],
+                        )
+                    )
+                )
+                for opportunity in opportunities
+            },
+            {
+                ("BetKing", "Polymarket"),
+                ("Betpawa", "Polymarket"),
+                ("MSport", "Polymarket"),
+            },
+        )
+        self.assertEqual(
+            count_matched_pairs(
+                self.betpawa,
+                [],
+                betking_matches=betking,
+                msport_matches=msport,
+                polymarket_matches=polymarket,
+            ),
+            6,
         )
 
     def test_rejects_extreme_arbitrage_roi_above_configured_maximum(self) -> None:
@@ -632,6 +695,25 @@ class ArbitrageTests(unittest.TestCase):
             asyncio.run(scan_once(set()))
 
         self.assertEqual(find_arbitrage.call_args.kwargs["msport_matches"], [])
+
+    def test_scanner_continues_when_polymarket_fetch_fails(self) -> None:
+        with (
+            patch(
+                "main.POLYMARKET_FEED_URL",
+                "https://gamma-api.polymarket.com/events",
+            ),
+            patch("main.fetch_betpawa_matches", return_value=[]),
+            patch("main.fetch_bet9ja_matches", return_value=[]),
+            patch("main.fetch_msport_matches", return_value=[]),
+            patch("main.fetch_polymarket_matches", side_effect=RuntimeError("down")),
+            patch("main.find_arbitrage", return_value=[]) as find_arbitrage,
+        ):
+            asyncio.run(scan_once(set()))
+
+        self.assertEqual(
+            find_arbitrage.call_args.kwargs["polymarket_matches"],
+            [],
+        )
 
     def test_failed_telegram_send_keeps_batch_running_and_is_not_deduplicated(self) -> None:
         betpawa = [
