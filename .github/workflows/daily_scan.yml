@@ -1,7 +1,7 @@
 name: Daily arbitrage scan
 
 on:
-  schedule:
+#  schedule:
     - cron: "7,23,37,53 12-23 * * *"
   workflow_dispatch:
 
