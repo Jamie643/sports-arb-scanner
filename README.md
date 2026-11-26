@@ -1,4 +1,18 @@
-# Sports Arbitrage Scanner
+# ⚡ Sports Arbitrage Scanner
+
+![Python](https://shields.io)
+![FastAPI](https://shields.io)
+![License](https://shields.io)
+
+A lightweight, asynchronous pre-match sports arbitrage scanner built with **FastAPI** and **RapidFuzz**. It monitors odds across Nigerian sportsbooks (**BetKing**, **Betpawa**, **MSport**, **Bet9ja**) and **Polymarket**, calculates optimal ₦100-rounded stakes, and dispatches instant alerts via **Telegram**.
+
+---
+
+## ✨ Key Features
+* **Multi-Bookmaker Coverage:** Native adapters for BetKing, Betpawa, MSport, Polymarket (CLOB order-book pricing), and optional Bet9ja JSON feeds.
+* **Smart Event Matching:** Fuzzy-matches team and league names via `RapidFuzz` within a 30-minute kickoff window.
+* **Risk & Liquidity Filters:** Enforces a 10-minute pre-kickoff buffer, caps ROI at 15% to filter stale/erroneous lines, and calculates stakes against a configurable NGN bankroll.
+* **Flexible Deployment:** Run continuously via `uvicorn` (45s polling) or as stateless batch jobs via GitHub Actions.
 
 A lightweight FastAPI scanner for pre-match two-way football, basketball, and
 tennis markets. It compares Betpawa Nigeria, BetKing Nigeria, MSport Nigeria,
